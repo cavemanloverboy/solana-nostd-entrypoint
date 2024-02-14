@@ -1,0 +1,25 @@
+[package]
+name = "solana-nostd-entrypoint"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[features]
+example-program = []
+
+[dependencies]
+arrayvec = { version = "0.7.4", default-features = false }
+bytemuck = { version = "1.13.1", features = ["align_offset"] }
+solana-program = "1.18.1"
+
+[dev-dependencies]
+solana-program-test = "1.18.1"
+solana-sdk = "1.18.1"
+tokio = { version = "1.35.1", features = ["full"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
