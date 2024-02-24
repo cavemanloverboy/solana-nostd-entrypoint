@@ -1,8 +1,6 @@
 #![cfg(feature = "example-program")]
 use solana_program::{
     instruction::{AccountMeta, Instruction},
-    //     pubkey::Pubkey,
-    //     system_program,
 };
 use solana_program_test::ProgramTest;
 use solana_sdk::{signature::Keypair, signer::Signer, transaction::Transaction};
