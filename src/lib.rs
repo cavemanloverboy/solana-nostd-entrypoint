@@ -5,6 +5,28 @@ pub use solana_program;
 pub mod entrypoint_nostd;
 pub use entrypoint_nostd::*;
 
+#[macro_export]
+macro_rules! noalloc_allocator {
+    () => {
+        pub mod allocator {
+            pub struct NoAlloc;
+            extern crate alloc;
+            unsafe impl alloc::alloc::GlobalAlloc for NoAlloc {
+                #[inline]
+                unsafe fn alloc(&self, _: core::alloc::Layout) -> *mut u8 {
+                    panic!("no_alloc :)");
+                }
+                #[inline]
+                unsafe fn dealloc(&self, _: *mut u8, _: core::alloc::Layout) {}
+            }
+
+            #[cfg(target_os = "solana")]
+            #[global_allocator]
+            static A: NoAlloc = NoAlloc;
+        }
+    };
+}
+
 #[cfg(feature = "example-program")]
 pub mod entrypoint {
     use super::*;
@@ -15,6 +37,8 @@ pub mod entrypoint {
     entrypoint_nostd!(process_instruction, 32);
 
     pub const ID: Pubkey = solana_program::pubkey!("EWUt9PAjn26zCUALRRt56Gutaj52Bpb8ifbf7GZX3h1k");
+
+    noalloc_allocator!();
 
     pub fn process_instruction(
         _program_id: &Pubkey,
