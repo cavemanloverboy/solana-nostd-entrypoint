@@ -27,6 +27,17 @@ macro_rules! noalloc_allocator {
     };
 }
 
+#[macro_export]
+macro_rules! basic_panic_impl {
+    () => {
+        #[cfg(target_os = "solana")]
+        #[no_mangle]
+        fn custom_panic(_info: &core::panic::PanicInfo<'_>) {
+            log::sol_log("panicked!");
+        }
+    };
+}
+
 #[cfg(feature = "example-program")]
 pub mod entrypoint {
     use super::*;
@@ -39,6 +50,7 @@ pub mod entrypoint {
     pub const ID: Pubkey = solana_program::pubkey!("EWUt9PAjn26zCUALRRt56Gutaj52Bpb8ifbf7GZX3h1k");
 
     noalloc_allocator!();
+    basic_panic_impl!();
 
     pub fn process_instruction(
         _program_id: &Pubkey,
