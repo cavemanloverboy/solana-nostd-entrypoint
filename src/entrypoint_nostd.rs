@@ -4,7 +4,6 @@ use alloc::rc::Rc;
 use core::{cell::RefCell, marker::PhantomData, mem::size_of, ptr::NonNull, slice::from_raw_parts};
 
 use arrayvec::ArrayVec;
-use bytemuck::{Pod, Zeroable};
 use solana_program::{
     entrypoint::{BPF_ALIGN_OF_U128, MAX_PERMITTED_DATA_INCREASE, NON_DUP_MARKER},
     log,
@@ -184,7 +183,7 @@ pub struct NoStdAccountInfo {
     inner: *mut NoStdAccountInfoInner,
 }
 
-#[derive(Clone, Pod, Zeroable, Copy, Default)]
+#[derive(Clone, Copy, Default)]
 #[repr(C)]
 pub struct NoStdAccountInfoInner {
     /// 0) We reuse the duplicate flag for this. We set it to 0b0000_0000.
