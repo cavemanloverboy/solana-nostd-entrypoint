@@ -6,7 +6,6 @@ use core::{cell::RefCell, marker::PhantomData, mem::size_of, ptr::NonNull, slice
 use arrayvec::ArrayVec;
 use bytemuck::{Pod, Zeroable};
 use solana_program::{
-    account_info::AccountInfo,
     entrypoint::{BPF_ALIGN_OF_U128, MAX_PERMITTED_DATA_INCREASE, NON_DUP_MARKER},
     log,
     pubkey::Pubkey,
@@ -15,6 +14,8 @@ use solana_program::{
 #[macro_export]
 macro_rules! entrypoint_nostd {
     ($process_instruction:ident, $accounts:literal) => {
+        /// # Safety:
+        /// solana entrypoint
         #[no_mangle]
         pub unsafe extern "C" fn entrypoint(input: *mut u8) -> u64 {
             let (program_id, accounts, instruction_data) =
@@ -30,6 +31,8 @@ macro_rules! entrypoint_nostd {
 #[macro_export]
 macro_rules! entrypoint_nostd_no_duplicates {
     ($process_instruction:ident, $accounts:literal) => {
+        /// # Safety:
+        /// solana entrypoint
         #[no_mangle]
         pub unsafe extern "C" fn entrypoint(input: *mut u8) -> u64 {
             let Some((program_id, accounts, instruction_data)) =
@@ -52,7 +55,7 @@ pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
     input: *mut u8,
 ) -> (
     &'a Pubkey,
-    ArrayVec<NoStdAccountInfo4, MAX_ACCOUNTS>,
+    ArrayVec<NoStdAccountInfo, MAX_ACCOUNTS>,
     &'a [u8],
 ) {
     let mut offset: usize = 0;
@@ -70,21 +73,19 @@ pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
             // MAGNETAR FIELDS: safety depends on alignment, size
             // 1) we will always be 8 byte aligned due to align_offset
             // 2) solana vm serialization format is consistent so size is ok
-            let account_info: &mut NoStdAccountInfo4Inner =
-                core::mem::transmute::<&mut u8, _>(&mut *(input.add(offset)));
-            // bytemuck::try_from_bytes_mut(from_raw_parts_mut(input.add(offset), 88)).unwrap();
+            let account_info: *mut NoStdAccountInfoInner = input.add(offset) as *mut _;
 
-            offset += size_of::<NoStdAccountInfo4Inner>();
-            offset += account_info.data_len;
+            offset += size_of::<NoStdAccountInfoInner>();
+            offset += (*account_info).data_len;
             offset += MAX_PERMITTED_DATA_INCREASE;
             offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
             offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
 
             // MAGNETAR FIELDS: reset borrow state right before pushing
-            account_info.borrow_state = 0b_0000_0000;
+            (*account_info).borrow_state = 0b_0000_0000;
             if accounts
-                .try_push(NoStdAccountInfo4 {
-                    inner: account_info,
+                .try_push(NoStdAccountInfo {
+                    inner: account_info as *const _ as *mut _,
                 })
                 .is_err()
             {
@@ -121,7 +122,7 @@ pub unsafe fn deserialize_nostd_no_dup<'a, const MAX_ACCOUNTS: usize>(
     input: *mut u8,
 ) -> Option<(
     &'a Pubkey,
-    ArrayVec<NoStdAccountInfo4, MAX_ACCOUNTS>,
+    ArrayVec<NoStdAccountInfo, MAX_ACCOUNTS>,
     &'a [u8],
 )> {
     let mut offset: usize = 0;
@@ -139,10 +140,10 @@ pub unsafe fn deserialize_nostd_no_dup<'a, const MAX_ACCOUNTS: usize>(
             // MAGNETAR FIELDS: safety depends on alignment, size
             // 1) we will always be 8 byte aligned due to align_offset
             // 2) solana vm serialization format is consistent so size is ok
-            let account_info: &mut NoStdAccountInfo4Inner =
+            let account_info: &mut NoStdAccountInfoInner =
                 core::mem::transmute::<&mut u8, _>(&mut *(input.add(offset)));
             // bytemuck::try_from_bytes_mut(from_raw_parts_mut(input.add(offset), 88)).unwrap();
-            offset += size_of::<NoStdAccountInfo4Inner>();
+            offset += size_of::<NoStdAccountInfoInner>();
             offset += account_info.data_len;
             offset += MAX_PERMITTED_DATA_INCREASE;
             offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
@@ -151,7 +152,7 @@ pub unsafe fn deserialize_nostd_no_dup<'a, const MAX_ACCOUNTS: usize>(
             // MAGNETAR FIELDS: reset borrow state right before pushing
             account_info.borrow_state = 0b_0000_0000;
             if accounts
-                .try_push(NoStdAccountInfo4 {
+                .try_push(NoStdAccountInfo {
                     inner: account_info,
                 })
                 .is_err()
@@ -179,20 +180,13 @@ pub unsafe fn deserialize_nostd_no_dup<'a, const MAX_ACCOUNTS: usize>(
 
 #[derive(Clone, PartialEq, Eq)]
 #[repr(C)]
-pub struct NoStdAccountInfo4 {
-    inner: *mut NoStdAccountInfo4Inner,
-}
-
-impl NoStdAccountInfo4 {
-    /// SAFETY: you must ensure that this pointer IS + REMAINS valid.
-    pub unsafe fn from(inner: *mut NoStdAccountInfo4Inner) -> NoStdAccountInfo4 {
-        NoStdAccountInfo4 { inner }
-    }
+pub struct NoStdAccountInfo {
+    inner: *mut NoStdAccountInfoInner,
 }
 
 #[derive(Clone, Pod, Zeroable, Copy, Default)]
 #[repr(C)]
-pub struct NoStdAccountInfo4Inner {
+pub struct NoStdAccountInfoInner {
     /// 0) We reuse the duplicate flag for this. We set it to 0b0000_0000.
     /// 1) We use the first four bits to track state of lamport borrow
     /// 2) We use the second four bits to track state of data borrow
@@ -224,26 +218,51 @@ pub struct NoStdAccountInfo4Inner {
     data_len: usize,
 }
 
+#[derive(Debug)]
 #[repr(C)]
 pub struct AccountMetaC {
-    pubkey: *const Pubkey,
-    is_writable: bool,
-    is_signer: bool,
+    // Public key of the account
+    pub pubkey: *const Pubkey,
+
+    // Is the account writable?
+    pub is_writable: bool,
+
+    // Transaction was signed by this account's key?
+    pub is_signer: bool,
 }
 
+/// An AccountInfo as expected by sol_invoke_signed_c
 pub struct AccountInfoC {
-    pub key: *const Pubkey,   /* Public key of the account */
-    pub lamports: *const u64, /* Number of lamports owned by this account */
-    pub data_len: u64,        /* Length of data in bytes */
-    pub data: *const u8,      /* On-chain data within this account */
-    pub owner: *const Pubkey, /* Program that owns this account */
-    pub rent_epoch: u64,      /* The epoch at which this account will next owe rent */
-    pub is_signer: bool,      /* Transaction was signed by this account's key? */
-    pub is_writable: bool,    /* Is the account writable? */
-    pub executable: bool, /* This account's data contains a loaded program (and is now read-only) */
+    // Public key of the account
+    pub key: *const Pubkey,
+
+    // Number of lamports owned by this account
+    pub lamports: *const u64,
+
+    // Length of data in bytes
+    pub data_len: u64,
+
+    // On-chain data within this account
+    pub data: *const u8,
+
+    // Program that owns this account
+    pub owner: *const Pubkey,
+
+    // The epoch at which this account will next owe rent
+    pub rent_epoch: u64,
+
+    // Transaction was signed by this account's key?
+    pub is_signer: bool,
+
+    // Is the account writable?
+    pub is_writable: bool,
+
+    // This account's data contains a loaded program (and is now read-only)
+    pub executable: bool,
 }
 
 impl AccountInfoC {
+    /// A CPI utility function
     #[inline(always)]
     pub fn to_meta_c(&self) -> AccountMetaC {
         AccountMetaC {
@@ -252,6 +271,9 @@ impl AccountInfoC {
             is_signer: self.is_signer,
         }
     }
+
+    /// A CPI utility function.
+    /// Intended for PDAs that didn't sign transaction but must sign for cpi.
     #[inline(always)]
     pub fn to_meta_c_signer(&self) -> AccountMetaC {
         AccountMetaC {
@@ -262,13 +284,23 @@ impl AccountInfoC {
     }
 }
 
+/// An Instruction as expected by sol_invoke_signed_c
 #[derive(Debug, PartialEq)]
 #[repr(C)]
 pub struct InstructionC {
+    /// Public key of the program
     pub program_id: *const Pubkey,
+
+    /// Accounts expected by the program instruction
     pub accounts: *const AccountMetaC,
+
+    /// Number of accounts expected by the program instruction
     pub accounts_len: u64,
+
+    /// Data expected by the program instruction
     pub data: *const u8,
+
+    /// Length of the data expected by the program instruction
     pub data_len: u64,
 }
 
@@ -287,6 +319,7 @@ impl<'a, T: ?Sized> core::ops::Deref for Ref<'a, T> {
 
 impl<'a, T: ?Sized> Drop for Ref<'a, T> {
     // We just need to decrement the immutable borrow count
+    // maybe super minor todo: we can save the is_lamport check by using a separate ref type
     fn drop(&mut self) {
         if self.is_lamport {
             unsafe { *self.state.as_mut() -= 1 << 4 };
@@ -316,6 +349,7 @@ impl<'a, T: ?Sized> core::ops::DerefMut for RefMut<'a, T> {
 
 impl<'a, T: ?Sized> Drop for RefMut<'a, T> {
     // We need to unset the mut borrow flag
+    // maybe super minor todo: we can save the is_lamport check by using a separate type
     fn drop(&mut self) {
         if self.is_lamport {
             unsafe { *self.state.as_mut() &= 0b_0111_1111 };
@@ -345,7 +379,8 @@ pub struct RcRefCellInner<'a, T> {
 }
 
 impl<'a, T> RcRefCellInner<'a, T> {
-    pub fn new(value: T) -> RcRefCellInner<'a, T> {
+    #[allow(unused)] // used for sol_invoke_signed_rust, which is commented out for now...
+    fn new(value: T) -> RcRefCellInner<'a, T> {
         RcRefCellInner {
             strong: 2,
             weak: 2,
@@ -362,6 +397,7 @@ impl<'a, T> RcRefCellInner<'a, T> {
     /// used. There can be no safe abstraction that guarantees users
     /// do this because we cannot make Rc inherit the borrowed
     /// lifetime.
+    #[allow(unused)] // used for sol_invoke_signed_rust, which is commented out for now...
     unsafe fn as_rcrc(&self) -> Rc<RefCell<T>> {
         // Rc::from_raw expects pointer to T
         unsafe { Rc::from_raw(&self.refcell as *const RefCell<T>) }
@@ -373,7 +409,8 @@ const fn offset<T, U>(ptr: *const T, offset: usize) -> *const U {
     unsafe { (ptr as *const u8).add(offset) as *const U }
 }
 
-impl NoStdAccountInfo4 {
+impl NoStdAccountInfo {
+    /// CPI utility function
     pub fn to_info_c(&self) -> AccountInfoC {
         AccountInfoC {
             key: offset(self.inner, 8),
@@ -387,6 +424,8 @@ impl NoStdAccountInfo4 {
             executable: self.executable(),
         }
     }
+
+    /// CPI utility function
     pub fn to_meta_c(&self) -> AccountMetaC {
         AccountMetaC {
             pubkey: offset(self.inner, 8),
@@ -395,30 +434,43 @@ impl NoStdAccountInfo4 {
         }
     }
 
-    pub unsafe fn unchecked_info_prep<'a>(
-        &'a self,
-    ) -> (RcRefCellInner<&'a mut u64>, RcRefCellInner<&'a mut [u8]>) {
-        let lamports_inner = RcRefCellInner::new(self.unchecked_borrow_mut_lamports());
-        let data_inner = RcRefCellInner::new(self.unchecked_borrow_mut_data());
-        (lamports_inner, data_inner)
-    }
-
-    pub unsafe fn info_with<'a>(
-        &'a self,
-        lamports_data: &'a (RcRefCellInner<&'a mut u64>, RcRefCellInner<&'a mut [u8]>),
-    ) -> AccountInfo<'a> {
-        let (lamports, data) = lamports_data;
-        AccountInfo {
-            key: self.key(),
-            lamports: unsafe { lamports.as_rcrc() },
-            data: unsafe { data.as_rcrc() },
-            owner: self.owner(),
-            rent_epoch: u64::MAX,
-            is_signer: self.is_signer(),
+    /// CPI utility function.
+    ///
+    /// Intended for pdas that did not sign transaction but need to sign for cpi.
+    pub fn to_meta_c_signer(&self) -> AccountMetaC {
+        AccountMetaC {
+            pubkey: offset(self.inner, 8),
             is_writable: self.is_writable(),
-            executable: self.executable(),
+            is_signer: true,
         }
     }
+
+    // These two functions can be used to cpi via sol_invoke_signed_rust, but it is very easy to
+    // mess this up. Please just use sol_invoke_signed_c.
+    //
+    // pub unsafe fn unchecked_info_prep<'a>(
+    //     &'a self,
+    // ) -> (RcRefCellInner<&'a mut u64>, RcRefCellInner<&'a mut [u8]>) {
+    //     let lamports_inner = RcRefCellInner::new(self.unchecked_borrow_mut_lamports());
+    //     let data_inner = RcRefCellInner::new(self.unchecked_borrow_mut_data());
+    //     (lamports_inner, data_inner)
+    // }
+    // pub unsafe fn info_with<'a>(
+    //     &'a self,
+    //     lamports_data: &'a (RcRefCellInner<&'a mut u64>, RcRefCellInner<&'a mut [u8]>),
+    // ) -> solana_program::account_info::AccountInfo<'a> {
+    //     let (lamports, data) = lamports_data;
+    //     solana_program::account_info::AccountInfo {
+    //         key: self.key(),
+    //         lamports: unsafe { lamports.as_rcrc() },
+    //         data: unsafe { data.as_rcrc() },
+    //         owner: self.owner(),
+    //         rent_epoch: u64::MAX,
+    //         is_signer: self.is_signer(),
+    //         is_writable: self.is_writable(),
+    //         executable: self.executable(),
+    //     }
+    // }
 
     #[inline(always)]
     pub fn key(&self) -> &Pubkey {
@@ -445,19 +497,29 @@ impl NoStdAccountInfo4 {
         unsafe { (*self.inner).data_len }
     }
 
+    /// # SAFETY
+    /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
     pub unsafe fn unchecked_borrow_lamports(&self) -> &u64 {
         &(*self.inner).lamports
     }
+    /// # SAFETY
+    /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
     pub unsafe fn unchecked_borrow_mut_lamports(&self) -> &mut u64 {
         &mut (*self.inner).lamports
     }
+    /// # SAFETY
+    /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
     pub unsafe fn unchecked_borrow_data(&self) -> &[u8] {
         core::slice::from_raw_parts(self.data_ptr(), (*self.inner).data_len)
     }
+    /// # SAFETY
+    /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
     pub unsafe fn unchecked_borrow_mut_data(&self) -> &mut [u8] {
         core::slice::from_raw_parts_mut(self.data_ptr(), (*self.inner).data_len)
     }
 
+    /// Tries to get a read only reference to the lamport field, failing if the field is already mutable borrowed or
+    /// if 7 borrows already exist.
     pub fn try_borrow_lamports(&self) -> Option<Ref<u64>> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
@@ -482,6 +544,7 @@ impl NoStdAccountInfo4 {
         })
     }
 
+    /// Tries to get a read only reference to the lamport field, failing if the field is already borrowed in any form.
     pub fn try_borrow_mut_lamports(&self) -> Option<RefMut<u64>> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
@@ -501,6 +564,8 @@ impl NoStdAccountInfo4 {
         })
     }
 
+    /// Tries to get a read only reference to the data field, failing if the field is already mutable borrowed or
+    /// if 7 borrows already exist.
     pub fn try_borrow_data(&self) -> Option<Ref<[u8]>> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
@@ -525,6 +590,7 @@ impl NoStdAccountInfo4 {
         })
     }
 
+    /// Tries to get a read only reference to the data field, failing if the field is already borrowed in any form.
     pub fn try_borrow_mut_data(&self) -> Option<RefMut<[u8]>> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
@@ -548,8 +614,8 @@ impl NoStdAccountInfo4 {
         })
     }
 
-    // private
+    /// Private: gets the memory addr of the account data
     fn data_ptr(&self) -> *mut u8 {
-        unsafe { (self.inner as *const _ as *mut u8).add(size_of::<NoStdAccountInfo4Inner>()) }
+        unsafe { (self.inner as *const _ as *mut u8).add(size_of::<NoStdAccountInfoInner>()) }
     }
 }
