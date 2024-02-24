@@ -8,6 +8,7 @@ authors = [
     "Cavey Cool <caveycool@gmail.com>",
     "Magnetar Fields <0xMAGNETAR@proton.me>",
 ]
+repository = "https://github.com/cavemanloverboy/solana-nostd-entrypoint"
 
 [lib]
 crate-type = ["cdylib", "lib"]
