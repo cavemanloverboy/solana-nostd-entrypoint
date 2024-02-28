@@ -1,0 +1,23 @@
+[package]
+name = "solana-nostd-example-program"
+version = "0.1.0"
+edition = "2021"
+description = "An example usage of solana-nostd-entrypoint"
+license = "MIT OR Apache-2.0"
+authors = [
+    "Cavey Cool <caveycool@gmail.com>",
+    "Magnetar Fields <0xMAGNETAR@proton.me>",
+]
+repository = "https://github.com/cavemanloverboy/solana-nostd-entrypoint"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+solana-nostd-entrypoint = { workspace = true }
+solana-program = "1.18.1"
+
+[dev-dependencies]
+solana-program-test = "1.18.1"
+solana-sdk = "1.18.1"
+tokio = { version = "1.35.1", features = ["full"] }

@@ -1,17 +1,12 @@
-#![cfg(feature = "example-program")]
-use solana_program::{
-    instruction::{AccountMeta, Instruction},
-    //     pubkey::Pubkey,
-    //     system_program,
-};
+use solana_program::instruction::{AccountMeta, Instruction};
 use solana_program_test::ProgramTest;
 use solana_sdk::{signature::Keypair, signer::Signer, transaction::Transaction};
 
 #[tokio::test(flavor = "current_thread")]
 async fn no_std_integration() {
     let mut program_test = ProgramTest::new(
-        "solana_nostd_entrypoint",
-        solana_nostd_entrypoint::entrypoint::ID,
+        "solana_nostd_example_program",
+        solana_nostd_example_program::ID,
         None,
     );
     program_test.prefer_bpf(true);
@@ -24,7 +19,7 @@ async fn no_std_integration() {
         AccountMeta::new_readonly(solana_program::system_program::ID, false),
     ];
     let instruction = Instruction {
-        program_id: solana_nostd_entrypoint::entrypoint::ID,
+        program_id: solana_nostd_example_program::ID,
         accounts: accounts.to_vec(),
         data: vec![],
     };

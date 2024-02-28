@@ -1,26 +1,6 @@
-[package]
-name = "solana-nostd-entrypoint"
-version = "0.1.0"
-edition = "2021"
-description = "A zerocopy, no_alloc/no_std entrypoint for solana programs."
-license = "MIT OR Apache-2.0"
-authors = [
-    "Cavey Cool <caveycool@gmail.com>",
-    "Magnetar Fields <0xMAGNETAR@proton.me>",
-]
-repository = "https://github.com/cavemanloverboy/solana-nostd-entrypoint"
+[workspace]
+members = ["solana-nostd-entrypoint", "example-program"]
 
-[lib]
-crate-type = ["cdylib", "lib"]
 
-[features]
-example-program = []
-
-[dependencies]
-arrayvec = { version = "0.7.4", default-features = false }
-solana-program = "1.18.1"
-
-[dev-dependencies]
-solana-program-test = "1.18.1"
-solana-sdk = "1.18.1"
-tokio = { version = "1.35.1", features = ["full"] }
+[workspace.dependencies]
+solana-nostd-entrypoint = { path = "./solana-nostd-entrypoint" }

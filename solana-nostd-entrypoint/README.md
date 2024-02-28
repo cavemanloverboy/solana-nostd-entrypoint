@@ -1,44 +1,10 @@
-#![no_std]
-#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/README.md"))]
+# `solana-nostd-entrypoint`
 
-pub use solana_program;
+The entrypoint function in `solana_program` is grossly inefficient. With an empty `process_instruction` function, it uses upwards of 8000 bpf cus when the program receives 32 non-duplicate accounts. We use a new `NoStdAccountInfo` struct whose layout is consistent with that in the vm flat buffer `input: *mut u8`; unlike the usual entrypoint, it reads everything with no copies and no allocations.
 
-pub mod entrypoint_nostd;
-pub use entrypoint_nostd::*;
+This crate also includes a simple reference program that invokes another program. See `lib.rs`:
 
-#[macro_export]
-macro_rules! noalloc_allocator {
-    () => {
-        pub mod allocator {
-            pub struct NoAlloc;
-            extern crate alloc;
-            unsafe impl alloc::alloc::GlobalAlloc for NoAlloc {
-                #[inline]
-                unsafe fn alloc(&self, _: core::alloc::Layout) -> *mut u8 {
-                    panic!("no_alloc :)");
-                }
-                #[inline]
-                unsafe fn dealloc(&self, _: *mut u8, _: core::alloc::Layout) {}
-            }
-
-            #[cfg(target_os = "solana")]
-            #[global_allocator]
-            static A: NoAlloc = NoAlloc;
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! basic_panic_impl {
-    () => {
-        #[cfg(target_os = "solana")]
-        #[no_mangle]
-        fn custom_panic(_info: &core::panic::PanicInfo<'_>) {
-            log::sol_log("panicked!");
-        }
-    };
-}
-
+```rust
 #[cfg(feature = "example-program")]
 pub mod entrypoint {
     use super::*;
@@ -105,3 +71,4 @@ pub mod entrypoint {
         Ok(())
     }
 }
+```
