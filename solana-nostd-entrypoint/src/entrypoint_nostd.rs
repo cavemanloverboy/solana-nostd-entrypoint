@@ -217,7 +217,7 @@ pub struct NoStdAccountInfoInner {
     data_len: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct AccountMetaC {
     // Public key of the account
