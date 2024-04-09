@@ -231,6 +231,8 @@ pub struct AccountMetaC {
 }
 
 /// An AccountInfo as expected by sol_invoke_signed_c
+#[repr(C)]
+#[derive(Clone)]
 pub struct AccountInfoC {
     // Public key of the account
     pub key: *const Pubkey,
@@ -284,7 +286,7 @@ impl AccountInfoC {
 }
 
 /// An Instruction as expected by sol_invoke_signed_c
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[repr(C)]
 pub struct InstructionC {
     /// Public key of the program
