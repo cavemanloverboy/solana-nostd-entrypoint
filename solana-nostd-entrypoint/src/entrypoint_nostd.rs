@@ -41,7 +41,6 @@ macro_rules! entrypoint_nostd_no_duplicates {
                 solana_program::log::sol_log("a duplicate account was found");
                 return u64::MAX;
             };
-            // solana_program::entrypoint::SUCCESS
             match $process_instruction(&program_id, &accounts, &instruction_data) {
                 Ok(()) => solana_program::entrypoint::SUCCESS,
                 Err(error) => error.into(),
@@ -59,7 +58,7 @@ macro_rules! entrypoint_nostd_no_program {
         pub unsafe extern "C" fn entrypoint(input: *mut u8) -> u64 {
             let (accounts, instruction_data) =
                 unsafe { $crate::deserialize_nostd_no_program::<$accounts>(input) };
-            match $process_instruction(&program_id, &accounts, &instruction_data) {
+            match $process_instruction(&accounts, &instruction_data) {
                 Ok(()) => solana_program::entrypoint::SUCCESS,
                 Err(error) => error.into(),
             }
@@ -81,8 +80,7 @@ macro_rules! entrypoint_nostd_no_duplicates_no_program {
                 solana_program::log::sol_log("a duplicate account was found");
                 return u64::MAX;
             };
-            // solana_program::entrypoint::SUCCESS
-            match $process_instruction(&program_id, &accounts, &instruction_data) {
+            match $process_instruction(&accounts, &instruction_data) {
                 Ok(()) => solana_program::entrypoint::SUCCESS,
                 Err(error) => error.into(),
             }
