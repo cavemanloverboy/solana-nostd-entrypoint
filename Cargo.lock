@@ -3866,7 +3866,7 @@ checksum = "8b8a731ed60e89177c8a7ab05fe0f1511cedd3e70e773f288f9de33a9cfdc21e"
 
 [[package]]
 name = "solana-nostd-entrypoint"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "arrayvec",
  "solana-program",
