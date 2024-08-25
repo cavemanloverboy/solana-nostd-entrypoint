@@ -50,6 +50,46 @@ macro_rules! entrypoint_nostd_no_duplicates {
     };
 }
 
+#[macro_export]
+macro_rules! entrypoint_nostd_no_program {
+    ($process_instruction:ident, $accounts:literal) => {
+        /// # Safety:
+        /// solana entrypoint
+        #[no_mangle]
+        pub unsafe extern "C" fn entrypoint(input: *mut u8) -> u64 {
+            let (accounts, instruction_data) =
+                unsafe { $crate::deserialize_nostd_no_program::<$accounts>(input) };
+            match $process_instruction(&program_id, &accounts, &instruction_data) {
+                Ok(()) => solana_program::entrypoint::SUCCESS,
+                Err(error) => error.into(),
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! entrypoint_nostd_no_duplicates_no_program {
+    ($process_instruction:ident, $accounts:literal) => {
+        /// # Safety:
+        /// solana entrypoint
+        #[no_mangle]
+        pub unsafe extern "C" fn entrypoint(input: *mut u8) -> u64 {
+            let Some((program_id, accounts, instruction_data)) =
+                $crate::deserialize_nostd_no_dup_no_program::<$accounts>(input)
+            else {
+                // TODO: better error
+                solana_program::log::sol_log("a duplicate account was found");
+                return u64::MAX;
+            };
+            // solana_program::entrypoint::SUCCESS
+            match $process_instruction(&program_id, &accounts, &instruction_data) {
+                Ok(()) => solana_program::entrypoint::SUCCESS,
+                Err(error) => error.into(),
+            }
+        }
+    };
+}
+
 pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
     input: *mut u8,
 ) -> (
@@ -175,6 +215,117 @@ pub unsafe fn deserialize_nostd_no_dup<'a, const MAX_ACCOUNTS: usize>(
     let program_id: &Pubkey = &*(input.add(offset) as *const Pubkey);
 
     Some((program_id, accounts, instruction_data))
+}
+
+pub unsafe fn deserialize_nostd_no_program<'a, const MAX_ACCOUNTS: usize>(
+    input: *mut u8,
+) -> (ArrayVec<NoStdAccountInfo, MAX_ACCOUNTS>, &'a [u8]) {
+    let mut offset: usize = 0;
+
+    // Number of accounts present
+    #[allow(clippy::cast_ptr_alignment)]
+    let num_accounts = *(input.add(offset) as *const u64) as usize;
+    offset += size_of::<u64>();
+
+    // Account Infos
+    let mut accounts = ArrayVec::new();
+    for _ in 0..num_accounts {
+        let dup_info = *(input.add(offset) as *const u8);
+        if dup_info == NON_DUP_MARKER {
+            // MAGNETAR FIELDS: safety depends on alignment, size
+            // 1) we will always be 8 byte aligned due to align_offset
+            // 2) solana vm serialization format is consistent so size is ok
+            let account_info: *mut NoStdAccountInfoInner = input.add(offset) as *mut _;
+
+            offset += size_of::<NoStdAccountInfoInner>();
+            offset += (*account_info).data_len;
+            offset += MAX_PERMITTED_DATA_INCREASE;
+            offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
+            offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
+
+            // MAGNETAR FIELDS: reset borrow state right before pushing
+            (*account_info).borrow_state = 0b_0000_0000;
+            if accounts
+                .try_push(NoStdAccountInfo {
+                    inner: account_info as *const _ as *mut _,
+                })
+                .is_err()
+            {
+                log::sol_log("ArrayVec is full. Truncating input accounts");
+            };
+        } else {
+            offset += 8;
+
+            // Duplicate account, clone the original
+            if accounts
+                .try_push(accounts[dup_info as usize].clone())
+                .is_err()
+            {
+                log::sol_log("ArrayVec is full. Truncating input accounts");
+            };
+        }
+    }
+
+    // Instruction data
+    #[allow(clippy::cast_ptr_alignment)]
+    let instruction_data_len = *(input.add(offset) as *const u64) as usize;
+    offset += size_of::<u64>();
+
+    let instruction_data = { from_raw_parts(input.add(offset), instruction_data_len) };
+
+    (accounts, instruction_data)
+}
+
+pub unsafe fn deserialize_nostd_no_dup_no_program<'a, const MAX_ACCOUNTS: usize>(
+    input: *mut u8,
+) -> Option<(ArrayVec<NoStdAccountInfo, MAX_ACCOUNTS>, &'a [u8])> {
+    let mut offset: usize = 0;
+
+    // Number of accounts present
+    #[allow(clippy::cast_ptr_alignment)]
+    let num_accounts = *(input.add(offset) as *const u64) as usize;
+    offset += size_of::<u64>();
+
+    // Account Infos
+    let mut accounts = ArrayVec::new();
+    for _ in 0..num_accounts {
+        let dup_info = *(input.add(offset) as *const u8);
+        if dup_info == NON_DUP_MARKER {
+            // MAGNETAR FIELDS: safety depends on alignment, size
+            // 1) we will always be 8 byte aligned due to align_offset
+            // 2) solana vm serialization format is consistent so size is ok
+            let account_info: &mut NoStdAccountInfoInner =
+                core::mem::transmute::<&mut u8, _>(&mut *(input.add(offset)));
+            // bytemuck::try_from_bytes_mut(from_raw_parts_mut(input.add(offset), 88)).unwrap();
+            offset += size_of::<NoStdAccountInfoInner>();
+            offset += account_info.data_len;
+            offset += MAX_PERMITTED_DATA_INCREASE;
+            offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
+            offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
+
+            // MAGNETAR FIELDS: reset borrow state right before pushing
+            account_info.borrow_state = 0b_0000_0000;
+            if accounts
+                .try_push(NoStdAccountInfo {
+                    inner: account_info,
+                })
+                .is_err()
+            {
+                log::sol_log("ArrayVec is full. Truncating input accounts");
+            };
+        } else {
+            return None;
+        }
+    }
+
+    // Instruction data
+    #[allow(clippy::cast_ptr_alignment)]
+    let instruction_data_len = *(input.add(offset) as *const u64) as usize;
+    offset += size_of::<u64>();
+
+    let instruction_data = { from_raw_parts(input.add(offset), instruction_data_len) };
+
+    Some((accounts, instruction_data))
 }
 
 #[derive(Clone, PartialEq, Eq)]
