@@ -73,7 +73,7 @@ macro_rules! entrypoint_nostd_no_duplicates_no_program {
         /// solana entrypoint
         #[no_mangle]
         pub unsafe extern "C" fn entrypoint(input: *mut u8) -> u64 {
-            let Some((program_id, accounts, instruction_data)) =
+            let Some((accounts, instruction_data)) =
                 $crate::deserialize_nostd_no_dup_no_program::<$accounts>(input)
             else {
                 // TODO: better error
