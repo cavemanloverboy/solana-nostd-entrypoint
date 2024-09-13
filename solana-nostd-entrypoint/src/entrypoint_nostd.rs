@@ -654,6 +654,7 @@ impl NoStdAccountInfo {
     }
     /// # SAFETY
     /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
+    #[allow(clippy::mut_from_ref)]
     pub unsafe fn unchecked_borrow_mut_lamports(&self) -> &mut u64 {
         &mut (*self.inner).lamports
     }
@@ -664,6 +665,7 @@ impl NoStdAccountInfo {
     }
     /// # SAFETY
     /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
+    #[allow(clippy::mut_from_ref)]
     pub unsafe fn unchecked_borrow_mut_data(&self) -> &mut [u8] {
         core::slice::from_raw_parts_mut(self.data_ptr(), (*self.inner).data_len)
     }
