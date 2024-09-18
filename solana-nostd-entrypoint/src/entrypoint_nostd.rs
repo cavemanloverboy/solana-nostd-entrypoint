@@ -126,6 +126,8 @@ macro_rules! entrypoint_nostd_no_duplicates_no_program {
     };
 }
 
+/// # Safety
+/// solana entrypoint
 pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
     input: *mut u8,
     accounts: &mut [MaybeUninit<NoStdAccountInfo>],
@@ -209,6 +211,8 @@ pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
     (program_id, processed, instruction_data)
 }
 
+/// # Safety
+/// solana entrypoint
 pub unsafe fn deserialize_nostd_no_dup<'a, const MAX_ACCOUNTS: usize>(
     input: *mut u8,
     accounts: &mut [MaybeUninit<NoStdAccountInfo>],
@@ -275,6 +279,8 @@ pub unsafe fn deserialize_nostd_no_dup<'a, const MAX_ACCOUNTS: usize>(
     Some((program_id, processed, instruction_data))
 }
 
+/// # Safety
+/// solana entrypoint
 pub unsafe fn deserialize_nostd_no_program<'a, const MAX_ACCOUNTS: usize>(
     input: *mut u8,
     accounts: &mut [MaybeUninit<NoStdAccountInfo>],
@@ -355,6 +361,8 @@ pub unsafe fn deserialize_nostd_no_program<'a, const MAX_ACCOUNTS: usize>(
     (processed, instruction_data)
 }
 
+/// # Safety
+/// solana entrypoint
 pub unsafe fn deserialize_nostd_no_dup_no_program<'a, const MAX_ACCOUNTS: usize>(
     input: *mut u8,
     accounts: &mut [MaybeUninit<NoStdAccountInfo>],
@@ -738,23 +746,23 @@ impl NoStdAccountInfo {
         unsafe { (*self.inner).data_len }
     }
 
-    /// # SAFETY
+    /// # Safety
     /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
     pub unsafe fn unchecked_borrow_lamports(&self) -> &u64 {
         &(*self.inner).lamports
     }
-    /// # SAFETY
+    /// # Safety
     /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
     #[allow(clippy::mut_from_ref)]
     pub unsafe fn unchecked_borrow_mut_lamports(&self) -> &mut u64 {
         &mut (*self.inner).lamports
     }
-    /// # SAFETY
+    /// # Safety
     /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
     pub unsafe fn unchecked_borrow_data(&self) -> &[u8] {
         core::slice::from_raw_parts(self.data_ptr(), (*self.inner).data_len)
     }
-    /// # SAFETY
+    /// # Safety
     /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
     #[allow(clippy::mut_from_ref)]
     pub unsafe fn unchecked_borrow_mut_data(&self) -> &mut [u8] {
