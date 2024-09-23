@@ -28,9 +28,15 @@ macro_rules! entrypoint_nostd {
 
             let (program_id, num_accounts, instruction_data) =
                 unsafe { $crate::deserialize_nostd::<$accounts>(input, &mut accounts) };
+
+            let account_infos = core::slice::from_raw_parts(
+                accounts.as_ptr() as *const NoStdAccountInfo,
+                num_accounts
+            );
+
             match $process_instruction(
                 &program_id,
-                core::slice::from_raw_parts(accounts.as_ptr() as _, num_accounts),
+                account_infos,
                 &instruction_data,
             ) {
                 Ok(()) => solana_program::entrypoint::SUCCESS,
@@ -59,9 +65,15 @@ macro_rules! entrypoint_nostd_no_duplicates {
                 solana_program::log::sol_log("a duplicate account was found");
                 return u64::MAX;
             };
+
+            let account_infos = core::slice::from_raw_parts(
+                accounts.as_ptr() as *const NoStdAccountInfo,
+                num_accounts
+            );
+            
             match $process_instruction(
                 &program_id,
-                core::slice::from_raw_parts(accounts.as_ptr() as _, num_accounts),
+                account_infos,
                 &instruction_data,
             ) {
                 Ok(()) => solana_program::entrypoint::SUCCESS,
@@ -85,8 +97,12 @@ macro_rules! entrypoint_nostd_no_program {
 
             let (num_accounts, instruction_data) =
                 unsafe { $crate::deserialize_nostd_no_program::<$accounts>(input, &mut accounts) };
+                    
+            let account_infos = core::slice::from_raw_parts(
+                accounts.as_ptr() as *const NoStdAccountInfo,
+                num_accounts);
             match $process_instruction(
-                core::slice::from_raw_parts(accounts.as_ptr() as _, num_accounts),
+                account_infos,
                 &instruction_data,
             ) {
                 Ok(()) => solana_program::entrypoint::SUCCESS,
@@ -115,8 +131,12 @@ macro_rules! entrypoint_nostd_no_duplicates_no_program {
                 solana_program::log::sol_log("a duplicate account was found");
                 return u64::MAX;
             };
+
+            let account_infos = core::slice::from_raw_parts(
+                accounts.as_ptr() as *const NoStdAccountInfo,
+                num_accounts);
             match $process_instruction(
-                core::slice::from_raw_parts(accounts.as_ptr() as _, num_accounts),
+                account_infos,
                 &instruction_data,
             ) {
                 Ok(()) => solana_program::entrypoint::SUCCESS,
