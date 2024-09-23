@@ -1,12 +1,16 @@
 extern crate alloc;
 use alloc::rc::Rc;
 
-use core::{cell::RefCell, marker::PhantomData, mem::size_of, ptr::NonNull, slice::from_raw_parts};
+use core::{
+    cell::RefCell,
+    marker::PhantomData,
+    mem::{size_of, MaybeUninit},
+    ptr::NonNull,
+    slice::from_raw_parts,
+};
 
-use arrayvec::ArrayVec;
 use solana_program::{
     entrypoint::{BPF_ALIGN_OF_U128, MAX_PERMITTED_DATA_INCREASE, NON_DUP_MARKER},
-    log,
     pubkey::Pubkey,
 };
 
@@ -17,9 +21,24 @@ macro_rules! entrypoint_nostd {
         /// solana entrypoint
         #[no_mangle]
         pub unsafe extern "C" fn entrypoint(input: *mut u8) -> u64 {
-            let (program_id, accounts, instruction_data) =
-                unsafe { $crate::deserialize_nostd::<$accounts>(input) };
-            match $process_instruction(&program_id, &accounts, &instruction_data) {
+            // Create an array of uninitialized AccountInfos.
+            const UNINIT_INFO: core::mem::MaybeUninit<NoStdAccountInfo> =
+                core::mem::MaybeUninit::uninit();
+            let mut accounts = [UNINIT_INFO; $accounts];
+
+            let (program_id, num_accounts, instruction_data) =
+                unsafe { $crate::deserialize_nostd::<$accounts>(input, &mut accounts) };
+
+            let account_infos = core::slice::from_raw_parts(
+                accounts.as_ptr() as *const NoStdAccountInfo,
+                num_accounts
+            );
+
+            match $process_instruction(
+                &program_id,
+                account_infos,
+                &instruction_data,
+            ) {
                 Ok(()) => solana_program::entrypoint::SUCCESS,
                 Err(error) => error.into(),
             }
@@ -34,14 +53,29 @@ macro_rules! entrypoint_nostd_no_duplicates {
         /// solana entrypoint
         #[no_mangle]
         pub unsafe extern "C" fn entrypoint(input: *mut u8) -> u64 {
-            let Some((program_id, accounts, instruction_data)) =
-                $crate::deserialize_nostd_no_dup::<$accounts>(input)
+            // Create an array of uninitialized AccountInfos.
+            const UNINIT_INFO: core::mem::MaybeUninit<NoStdAccountInfo> =
+                core::mem::MaybeUninit::uninit();
+            let mut accounts = [UNINIT_INFO; $accounts];
+
+            let Some((program_id, num_accounts, instruction_data)) =
+                $crate::deserialize_nostd_no_dup::<$accounts>(input, &mut accounts)
             else {
                 // TODO: better error
                 solana_program::log::sol_log("a duplicate account was found");
                 return u64::MAX;
             };
-            match $process_instruction(&program_id, &accounts, &instruction_data) {
+
+            let account_infos = core::slice::from_raw_parts(
+                accounts.as_ptr() as *const NoStdAccountInfo,
+                num_accounts
+            );
+
+            match $process_instruction(
+                &program_id,
+                account_infos,
+                &instruction_data,
+            ) {
                 Ok(()) => solana_program::entrypoint::SUCCESS,
                 Err(error) => error.into(),
             }
@@ -56,9 +90,21 @@ macro_rules! entrypoint_nostd_no_program {
         /// solana entrypoint
         #[no_mangle]
         pub unsafe extern "C" fn entrypoint(input: *mut u8) -> u64 {
-            let (accounts, instruction_data) =
-                unsafe { $crate::deserialize_nostd_no_program::<$accounts>(input) };
-            match $process_instruction(&accounts, &instruction_data) {
+            // Create an array of uninitialized AccountInfos.
+            const UNINIT_INFO: core::mem::MaybeUninit<NoStdAccountInfo> =
+                core::mem::MaybeUninit::uninit();
+            let mut accounts = [UNINIT_INFO; $accounts];
+
+            let (num_accounts, instruction_data) =
+                unsafe { $crate::deserialize_nostd_no_program::<$accounts>(input, &mut accounts) };
+                    
+            let account_infos = core::slice::from_raw_parts(
+                accounts.as_ptr() as *const NoStdAccountInfo,
+                num_accounts);
+            match $process_instruction(
+                account_infos,
+                &instruction_data,
+            ) {
                 Ok(()) => solana_program::entrypoint::SUCCESS,
                 Err(error) => error.into(),
             }
@@ -73,14 +119,26 @@ macro_rules! entrypoint_nostd_no_duplicates_no_program {
         /// solana entrypoint
         #[no_mangle]
         pub unsafe extern "C" fn entrypoint(input: *mut u8) -> u64 {
-            let Some((accounts, instruction_data)) =
-                $crate::deserialize_nostd_no_dup_no_program::<$accounts>(input)
+            // Create an array of uninitialized AccountInfos.
+            const UNINIT_INFO: core::mem::MaybeUninit<NoStdAccountInfo> =
+                core::mem::MaybeUninit::uninit();
+            let mut accounts = [UNINIT_INFO; $accounts];
+
+            let Some((num_accounts, instruction_data)) =
+                $crate::deserialize_nostd_no_dup_no_program::<$accounts>(input, &mut accounts)
             else {
                 // TODO: better error
                 solana_program::log::sol_log("a duplicate account was found");
                 return u64::MAX;
             };
-            match $process_instruction(&accounts, &instruction_data) {
+
+            let account_infos = core::slice::from_raw_parts(
+                accounts.as_ptr() as *const NoStdAccountInfo,
+                num_accounts);
+            match $process_instruction(
+                account_infos,
+                &instruction_data,
+            ) {
                 Ok(()) => solana_program::entrypoint::SUCCESS,
                 Err(error) => error.into(),
             }
@@ -88,13 +146,12 @@ macro_rules! entrypoint_nostd_no_duplicates_no_program {
     };
 }
 
+/// # Safety
+/// solana entrypoint
 pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
     input: *mut u8,
-) -> (
-    &'a Pubkey,
-    ArrayVec<NoStdAccountInfo, MAX_ACCOUNTS>,
-    &'a [u8],
-) {
+    accounts: &mut [MaybeUninit<NoStdAccountInfo>],
+) -> (&'a Pubkey, usize, &'a [u8]) {
     let mut offset: usize = 0;
 
     // Number of accounts present
@@ -102,44 +159,59 @@ pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
     let num_accounts = *(input.add(offset) as *const u64) as usize;
     offset += size_of::<u64>();
 
-    // Account Infos
-    let mut accounts = ArrayVec::new();
-    for _ in 0..num_accounts {
-        let dup_info = *(input.add(offset) as *const u8);
-        if dup_info == NON_DUP_MARKER {
-            // MAGNETAR FIELDS: safety depends on alignment, size
-            // 1) we will always be 8 byte aligned due to align_offset
-            // 2) solana vm serialization format is consistent so size is ok
-            let account_info: *mut NoStdAccountInfoInner = input.add(offset) as *mut _;
+    let processed = if num_accounts > 0 {
+        // we will only process up to MAX_ACCOUNTS
+        let processed = num_accounts.min(MAX_ACCOUNTS);
 
-            offset += size_of::<NoStdAccountInfoInner>();
-            offset += (*account_info).data_len;
-            offset += MAX_PERMITTED_DATA_INCREASE;
-            offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
-            offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
+        for i in 0..processed {
+            let dup_info = *(input.add(offset) as *const u8);
+            if dup_info == NON_DUP_MARKER {
+                // MAGNETAR FIELDS: safety depends on alignment, size
+                // 1) we will always be 8 byte aligned due to align_offset
+                // 2) solana vm serialization format is consistent so size is ok
+                let account_info: *mut NoStdAccountInfoInner = input.add(offset) as *mut _;
 
-            // MAGNETAR FIELDS: reset borrow state right before pushing
-            (*account_info).borrow_state = 0b_0000_0000;
-            if accounts
-                .try_push(NoStdAccountInfo {
-                    inner: account_info as *const _ as *mut _,
-                })
-                .is_err()
-            {
-                log::sol_log("ArrayVec is full. Truncating input accounts");
-            };
-        } else {
-            offset += 8;
+                offset += size_of::<NoStdAccountInfoInner>();
+                offset += (*account_info).data_len;
+                offset += MAX_PERMITTED_DATA_INCREASE;
+                offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
+                offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
 
-            // Duplicate account, clone the original
-            if accounts
-                .try_push(accounts[dup_info as usize].clone())
-                .is_err()
-            {
-                log::sol_log("ArrayVec is full. Truncating input accounts");
-            };
+                // MAGNETAR FIELDS: reset borrow state right before pushing
+                (*account_info).borrow_state = 0b_0000_0000;
+
+                accounts[i].write(NoStdAccountInfo {
+                    inner: account_info,
+                });
+            } else {
+                offset += 8;
+                // Duplicate account, clone the original
+                accounts[i].write(accounts[dup_info as usize].assume_init_ref().clone());
+            }
         }
-    }
+
+        // Skip any remaining accounts (if any) that we don't have space to include.
+        //
+        // This duplicates the logic of parsing accounts but avoids the extra CU
+        // consumption of having to check the array bounds at each iteration.
+        for _ in processed..num_accounts {
+            if *(input.add(offset) as *const u8) == NON_DUP_MARKER {
+                let account_info: *mut NoStdAccountInfoInner = input.add(offset) as *mut _;
+                offset += size_of::<NoStdAccountInfoInner>();
+                offset += (*account_info).data_len;
+                offset += MAX_PERMITTED_DATA_INCREASE;
+                offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
+                offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
+            } else {
+                offset += 8;
+            }
+        }
+
+        processed
+    } else {
+        // no accounts to process
+        0
+    };
 
     // Instruction data
     #[allow(clippy::cast_ptr_alignment)]
@@ -152,16 +224,15 @@ pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
     // Program Id
     let program_id: &Pubkey = &*(input.add(offset) as *const Pubkey);
 
-    (program_id, accounts, instruction_data)
+    (program_id, processed, instruction_data)
 }
 
+/// # Safety
+/// solana entrypoint
 pub unsafe fn deserialize_nostd_no_dup<'a, const MAX_ACCOUNTS: usize>(
     input: *mut u8,
-) -> Option<(
-    &'a Pubkey,
-    ArrayVec<NoStdAccountInfo, MAX_ACCOUNTS>,
-    &'a [u8],
-)> {
+    accounts: &mut [MaybeUninit<NoStdAccountInfo>],
+) -> Option<(&'a Pubkey, usize, &'a [u8])> {
     let mut offset: usize = 0;
 
     // Number of accounts present
@@ -170,36 +241,41 @@ pub unsafe fn deserialize_nostd_no_dup<'a, const MAX_ACCOUNTS: usize>(
     offset += size_of::<u64>();
 
     // Account Infos
-    let mut accounts = ArrayVec::new();
-    for _ in 0..num_accounts {
-        let dup_info = *(input.add(offset) as *const u8);
-        if dup_info == NON_DUP_MARKER {
-            // MAGNETAR FIELDS: safety depends on alignment, size
-            // 1) we will always be 8 byte aligned due to align_offset
-            // 2) solana vm serialization format is consistent so size is ok
-            let account_info: &mut NoStdAccountInfoInner =
-                core::mem::transmute::<&mut u8, _>(&mut *(input.add(offset)));
-            // bytemuck::try_from_bytes_mut(from_raw_parts_mut(input.add(offset), 88)).unwrap();
-            offset += size_of::<NoStdAccountInfoInner>();
-            offset += account_info.data_len;
-            offset += MAX_PERMITTED_DATA_INCREASE;
-            offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
-            offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
+    #[allow(clippy::needless_range_loop)]
+    let processed = if num_accounts > 0 {
+        // we will only process up to MAX_ACCOUNTS
+        let processed = num_accounts.min(MAX_ACCOUNTS);
 
-            // MAGNETAR FIELDS: reset borrow state right before pushing
-            account_info.borrow_state = 0b_0000_0000;
-            if accounts
-                .try_push(NoStdAccountInfo {
+        for i in 0..processed {
+            let dup_info = *(input.add(offset) as *const u8);
+            if dup_info == NON_DUP_MARKER {
+                // MAGNETAR FIELDS: safety depends on alignment, size
+                // 1) we will always be 8 byte aligned due to align_offset
+                // 2) solana vm serialization format is consistent so size is ok
+                let account_info: *mut NoStdAccountInfoInner = input.add(offset) as *mut _;
+
+                offset += size_of::<NoStdAccountInfoInner>();
+                offset += (*account_info).data_len;
+                offset += MAX_PERMITTED_DATA_INCREASE;
+                offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
+                offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
+
+                // MAGNETAR FIELDS: reset borrow state right before pushing
+                (*account_info).borrow_state = 0b_0000_0000;
+
+                accounts[i].write(NoStdAccountInfo {
                     inner: account_info,
-                })
-                .is_err()
-            {
-                log::sol_log("ArrayVec is full. Truncating input accounts");
-            };
-        } else {
-            return None;
+                });
+            } else {
+                return None;
+            }
         }
-    }
+
+        processed
+    } else {
+        // there were not accounts on the input
+        0
+    };
 
     // Instruction data
     #[allow(clippy::cast_ptr_alignment)]
@@ -212,12 +288,15 @@ pub unsafe fn deserialize_nostd_no_dup<'a, const MAX_ACCOUNTS: usize>(
     // Program Id
     let program_id: &Pubkey = &*(input.add(offset) as *const Pubkey);
 
-    Some((program_id, accounts, instruction_data))
+    Some((program_id, processed, instruction_data))
 }
 
+/// # Safety
+/// solana entrypoint
 pub unsafe fn deserialize_nostd_no_program<'a, const MAX_ACCOUNTS: usize>(
     input: *mut u8,
-) -> (ArrayVec<NoStdAccountInfo, MAX_ACCOUNTS>, &'a [u8]) {
+    accounts: &mut [MaybeUninit<NoStdAccountInfo>],
+) -> (usize, &'a [u8]) {
     let mut offset: usize = 0;
 
     // Number of accounts present
@@ -226,43 +305,59 @@ pub unsafe fn deserialize_nostd_no_program<'a, const MAX_ACCOUNTS: usize>(
     offset += size_of::<u64>();
 
     // Account Infos
-    let mut accounts = ArrayVec::new();
-    for _ in 0..num_accounts {
-        let dup_info = *(input.add(offset) as *const u8);
-        if dup_info == NON_DUP_MARKER {
-            // MAGNETAR FIELDS: safety depends on alignment, size
-            // 1) we will always be 8 byte aligned due to align_offset
-            // 2) solana vm serialization format is consistent so size is ok
-            let account_info: *mut NoStdAccountInfoInner = input.add(offset) as *mut _;
+    let processed = if num_accounts > 0 {
+        // we will only process up to MAX_ACCOUNTS
+        let processed = num_accounts.min(MAX_ACCOUNTS);
 
-            offset += size_of::<NoStdAccountInfoInner>();
-            offset += (*account_info).data_len;
-            offset += MAX_PERMITTED_DATA_INCREASE;
-            offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
-            offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
+        for i in 0..processed {
+            let dup_info = *(input.add(offset) as *const u8);
+            if dup_info == NON_DUP_MARKER {
+                // MAGNETAR FIELDS: safety depends on alignment, size
+                // 1) we will always be 8 byte aligned due to align_offset
+                // 2) solana vm serialization format is consistent so size is ok
+                let account_info: *mut NoStdAccountInfoInner = input.add(offset) as *mut _;
 
-            // MAGNETAR FIELDS: reset borrow state right before pushing
-            (*account_info).borrow_state = 0b_0000_0000;
-            if accounts
-                .try_push(NoStdAccountInfo {
-                    inner: account_info as *const _ as *mut _,
-                })
-                .is_err()
-            {
-                log::sol_log("ArrayVec is full. Truncating input accounts");
-            };
-        } else {
-            offset += 8;
+                offset += size_of::<NoStdAccountInfoInner>();
+                offset += (*account_info).data_len;
+                offset += MAX_PERMITTED_DATA_INCREASE;
+                offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
+                offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
 
-            // Duplicate account, clone the original
-            if accounts
-                .try_push(accounts[dup_info as usize].clone())
-                .is_err()
-            {
-                log::sol_log("ArrayVec is full. Truncating input accounts");
-            };
+                // MAGNETAR FIELDS: reset borrow state right before pushing
+                (*account_info).borrow_state = 0b_0000_0000;
+
+                accounts[i].write(NoStdAccountInfo {
+                    inner: account_info,
+                });
+            } else {
+                offset += 8;
+                // Duplicate account, clone the original
+                accounts[i].write(accounts[dup_info as usize].assume_init_ref().clone());
+            }
         }
-    }
+
+        // Skip any remaining accounts (if any) that we don't have space to include.
+        //
+        // This duplicates the logic of parsing accounts but avoids the extra CU
+        // consumption of having to check the array bounds at each iteration.
+        for _ in processed..num_accounts {
+            if *(input.add(offset) as *const u8) == NON_DUP_MARKER {
+                let account_info: *mut NoStdAccountInfoInner = input.add(offset) as *mut _;
+                offset += size_of::<NoStdAccountInfoInner>();
+                offset += (*account_info).data_len;
+                offset += MAX_PERMITTED_DATA_INCREASE;
+                offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
+                offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
+            } else {
+                offset += 8;
+            }
+        }
+
+        processed
+    } else {
+        // there were not accounts on the input
+        0
+    };
 
     // Instruction data
     #[allow(clippy::cast_ptr_alignment)]
@@ -271,12 +366,15 @@ pub unsafe fn deserialize_nostd_no_program<'a, const MAX_ACCOUNTS: usize>(
 
     let instruction_data = { from_raw_parts(input.add(offset), instruction_data_len) };
 
-    (accounts, instruction_data)
+    (processed, instruction_data)
 }
 
+/// # Safety
+/// solana entrypoint
 pub unsafe fn deserialize_nostd_no_dup_no_program<'a, const MAX_ACCOUNTS: usize>(
     input: *mut u8,
-) -> Option<(ArrayVec<NoStdAccountInfo, MAX_ACCOUNTS>, &'a [u8])> {
+    accounts: &mut [MaybeUninit<NoStdAccountInfo>],
+) -> Option<(usize, &'a [u8])> {
     let mut offset: usize = 0;
 
     // Number of accounts present
@@ -285,36 +383,41 @@ pub unsafe fn deserialize_nostd_no_dup_no_program<'a, const MAX_ACCOUNTS: usize>
     offset += size_of::<u64>();
 
     // Account Infos
-    let mut accounts = ArrayVec::new();
-    for _ in 0..num_accounts {
-        let dup_info = *(input.add(offset) as *const u8);
-        if dup_info == NON_DUP_MARKER {
-            // MAGNETAR FIELDS: safety depends on alignment, size
-            // 1) we will always be 8 byte aligned due to align_offset
-            // 2) solana vm serialization format is consistent so size is ok
-            let account_info: &mut NoStdAccountInfoInner =
-                core::mem::transmute::<&mut u8, _>(&mut *(input.add(offset)));
-            // bytemuck::try_from_bytes_mut(from_raw_parts_mut(input.add(offset), 88)).unwrap();
-            offset += size_of::<NoStdAccountInfoInner>();
-            offset += account_info.data_len;
-            offset += MAX_PERMITTED_DATA_INCREASE;
-            offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
-            offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
+    #[allow(clippy::needless_range_loop)]
+    let processed = if num_accounts > 0 {
+        // we will only process up to MAX_ACCOUNTS
+        let processed = num_accounts.min(MAX_ACCOUNTS);
 
-            // MAGNETAR FIELDS: reset borrow state right before pushing
-            account_info.borrow_state = 0b_0000_0000;
-            if accounts
-                .try_push(NoStdAccountInfo {
+        for i in 0..processed {
+            let dup_info = *(input.add(offset) as *const u8);
+            if dup_info == NON_DUP_MARKER {
+                // MAGNETAR FIELDS: safety depends on alignment, size
+                // 1) we will always be 8 byte aligned due to align_offset
+                // 2) solana vm serialization format is consistent so size is ok
+                let account_info: *mut NoStdAccountInfoInner = input.add(offset) as *mut _;
+
+                offset += size_of::<NoStdAccountInfoInner>();
+                offset += (*account_info).data_len;
+                offset += MAX_PERMITTED_DATA_INCREASE;
+                offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
+                offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
+
+                // MAGNETAR FIELDS: reset borrow state right before pushing
+                (*account_info).borrow_state = 0b_0000_0000;
+
+                accounts[i].write(NoStdAccountInfo {
                     inner: account_info,
-                })
-                .is_err()
-            {
-                log::sol_log("ArrayVec is full. Truncating input accounts");
-            };
-        } else {
-            return None;
+                });
+            } else {
+                return None;
+            }
         }
-    }
+
+        processed
+    } else {
+        // there were not accounts on the input
+        0
+    };
 
     // Instruction data
     #[allow(clippy::cast_ptr_alignment)]
@@ -323,7 +426,7 @@ pub unsafe fn deserialize_nostd_no_dup_no_program<'a, const MAX_ACCOUNTS: usize>
 
     let instruction_data = { from_raw_parts(input.add(offset), instruction_data_len) };
 
-    Some((accounts, instruction_data))
+    Some((processed, instruction_data))
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -647,23 +750,25 @@ impl NoStdAccountInfo {
         unsafe { (*self.inner).data_len }
     }
 
-    /// # SAFETY
+    /// # Safety
     /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
     pub unsafe fn unchecked_borrow_lamports(&self) -> &u64 {
         &(*self.inner).lamports
     }
-    /// # SAFETY
+    /// # Safety
     /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
+    #[allow(clippy::mut_from_ref)]
     pub unsafe fn unchecked_borrow_mut_lamports(&self) -> &mut u64 {
         &mut (*self.inner).lamports
     }
-    /// # SAFETY
+    /// # Safety
     /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
     pub unsafe fn unchecked_borrow_data(&self) -> &[u8] {
         core::slice::from_raw_parts(self.data_ptr(), (*self.inner).data_len)
     }
-    /// # SAFETY
+    /// # Safety
     /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
+    #[allow(clippy::mut_from_ref)]
     pub unsafe fn unchecked_borrow_mut_data(&self) -> &mut [u8] {
         core::slice::from_raw_parts_mut(self.data_ptr(), (*self.inner).data_len)
     }
