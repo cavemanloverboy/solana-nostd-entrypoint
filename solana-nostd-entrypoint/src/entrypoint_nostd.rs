@@ -70,7 +70,7 @@ macro_rules! entrypoint_nostd_no_duplicates {
                 accounts.as_ptr() as *const NoStdAccountInfo,
                 num_accounts
             );
-            
+
             match $process_instruction(
                 &program_id,
                 account_infos,
@@ -161,11 +161,7 @@ pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
 
     let processed = if num_accounts > 0 {
         // we will only process up to MAX_ACCOUNTS
-        let processed = if num_accounts > MAX_ACCOUNTS {
-            MAX_ACCOUNTS
-        } else {
-            num_accounts
-        };
+        let processed = num_accounts.min(MAX_ACCOUNTS);
 
         for i in 0..processed {
             let dup_info = *(input.add(offset) as *const u8);
@@ -248,11 +244,7 @@ pub unsafe fn deserialize_nostd_no_dup<'a, const MAX_ACCOUNTS: usize>(
     #[allow(clippy::needless_range_loop)]
     let processed = if num_accounts > 0 {
         // we will only process up to MAX_ACCOUNTS
-        let processed = if num_accounts > MAX_ACCOUNTS {
-            MAX_ACCOUNTS
-        } else {
-            num_accounts
-        };
+        let processed = num_accounts.min(MAX_ACCOUNTS);
 
         for i in 0..processed {
             let dup_info = *(input.add(offset) as *const u8);
@@ -315,11 +307,7 @@ pub unsafe fn deserialize_nostd_no_program<'a, const MAX_ACCOUNTS: usize>(
     // Account Infos
     let processed = if num_accounts > 0 {
         // we will only process up to MAX_ACCOUNTS
-        let processed = if num_accounts > MAX_ACCOUNTS {
-            MAX_ACCOUNTS
-        } else {
-            num_accounts
-        };
+        let processed = num_accounts.min(MAX_ACCOUNTS);
 
         for i in 0..processed {
             let dup_info = *(input.add(offset) as *const u8);
@@ -398,11 +386,7 @@ pub unsafe fn deserialize_nostd_no_dup_no_program<'a, const MAX_ACCOUNTS: usize>
     #[allow(clippy::needless_range_loop)]
     let processed = if num_accounts > 0 {
         // we will only process up to MAX_ACCOUNTS
-        let processed = if num_accounts > MAX_ACCOUNTS {
-            MAX_ACCOUNTS
-        } else {
-            num_accounts
-        };
+        let processed = num_accounts.min(MAX_ACCOUNTS);
 
         for i in 0..processed {
             let dup_info = *(input.add(offset) as *const u8);
