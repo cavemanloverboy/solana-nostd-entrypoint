@@ -1,6 +1,6 @@
 [package]
 name = "solana-nostd-entrypoint"
-version = "0.4.0"
+version = "0.4.2"
 edition = "2021"
 description = "A zerocopy, no_alloc/no_std entrypoint for solana programs."
 license = "MIT OR Apache-2.0"
@@ -14,4 +14,4 @@ repository = "https://github.com/cavemanloverboy/solana-nostd-entrypoint"
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
-solana-program = ">1.18"
+solana-program = "1.18"
