@@ -14,6 +14,7 @@ use solana_program::{
         BPF_ALIGN_OF_U128, MAX_PERMITTED_DATA_INCREASE, NON_DUP_MARKER,
     },
     pubkey::Pubkey,
+    program_error::ProgramError
 };
 
 #[macro_export]
@@ -835,24 +836,24 @@ impl NoStdAccountInfo {
 
     /// Tries to get a read only reference to the lamport field, failing if the field is already mutable borrowed or
     /// if 7 borrows already exist.
-    pub fn try_borrow_lamports(&self) -> Option<Ref<u64>> {
+    pub fn try_borrow_lamports(&self) -> Result<Ref<u64>, ProgramError> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
         // Check if mutable borrow is already taken
         if *borrow_state & 0b_1000_0000 != 0 {
-            return None;
+            return Err(ProgramError::AccountBorrowFailed);
         }
 
         // Check if we have reached the max immutable borrow count
         if *borrow_state & 0b_0111_0000 == 0b_0111_0000 {
-            return None;
+            return Err(ProgramError::AccountBorrowFailed);
         }
 
         // Increment the immutable borrow count
         *borrow_state += 1 << 4;
 
         // Return the reference to lamports
-        Some(Ref {
+        Ok(Ref {
             value: unsafe { &(*self.inner).lamports },
             state: unsafe {
                 NonNull::new_unchecked(&mut (*self.inner).borrow_state)
@@ -862,19 +863,19 @@ impl NoStdAccountInfo {
     }
 
     /// Tries to get a read only reference to the lamport field, failing if the field is already borrowed in any form.
-    pub fn try_borrow_mut_lamports(&self) -> Option<RefMut<u64>> {
+    pub fn try_borrow_mut_lamports(&self) -> Result<RefMut<u64>, ProgramError> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
         // Check if any borrow (mutable or immutable) is already taken for lamports
         if *borrow_state & 0b_1111_0000 != 0 {
-            return None;
+            return Err(ProgramError::AccountBorrowFailed);
         }
 
         // Set the mutable lamport borrow flag
         *borrow_state |= 0b_1000_0000;
 
         // Return the mutable reference to lamports
-        Some(RefMut {
+        Ok(RefMut {
             value: unsafe { &mut (*self.inner).lamports },
             state: unsafe {
                 NonNull::new_unchecked(&mut (*self.inner).borrow_state)
@@ -885,24 +886,24 @@ impl NoStdAccountInfo {
 
     /// Tries to get a read only reference to the data field, failing if the field is already mutable borrowed or
     /// if 7 borrows already exist.
-    pub fn try_borrow_data(&self) -> Option<Ref<[u8]>> {
+    pub fn try_borrow_data(&self) -> Result<Ref<[u8]>, ProgramError> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
         // Check if mutable data borrow is already taken (most significant bit of the data_borrow_state)
         if *borrow_state & 0b_0000_1000 != 0 {
-            return None;
+            return Err(ProgramError::AccountBorrowFailed);
         }
 
         // Check if we have reached the max immutable data borrow count (7)
         if *borrow_state & 0b0111 == 0b0111 {
-            return None;
+            return Err(ProgramError::AccountBorrowFailed);
         }
 
         // Increment the immutable data borrow count
         *borrow_state += 1;
 
         // Return the reference to data
-        Some(Ref {
+        Ok(Ref {
             value: unsafe {
                 core::slice::from_raw_parts(
                     self.data_ptr(),
@@ -917,12 +918,12 @@ impl NoStdAccountInfo {
     }
 
     /// Tries to get a read only reference to the data field, failing if the field is already borrowed in any form.
-    pub fn try_borrow_mut_data(&self) -> Option<RefMut<[u8]>> {
+    pub fn try_borrow_mut_data(&self) -> Result<RefMut<[u8]>, ProgramError> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
         // Check if any borrow (mutable or immutable) is already taken for data
         if *borrow_state & 0b_0000_1111 != 0 {
-            return None;
+            return Err(ProgramError::AccountBorrowFailed);
         }
 
         // Set the mutable data borrow flag
@@ -931,7 +932,7 @@ impl NoStdAccountInfo {
         assert_eq!(self.data_ptr() as usize % 8, 0); // TODO REMOVE
 
         // Return the mutable reference to data
-        Some(RefMut {
+        Ok(RefMut {
             value: unsafe {
                 core::slice::from_raw_parts_mut(
                     self.data_ptr(),
