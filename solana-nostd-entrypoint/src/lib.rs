@@ -14,11 +14,19 @@ macro_rules! noalloc_allocator {
             extern crate alloc;
             unsafe impl alloc::alloc::GlobalAlloc for NoAlloc {
                 #[inline]
-                unsafe fn alloc(&self, _: core::alloc::Layout) -> *mut u8 {
+                unsafe fn alloc(
+                    &self,
+                    _: core::alloc::Layout,
+                ) -> *mut u8 {
                     panic!("no_alloc :)");
                 }
                 #[inline]
-                unsafe fn dealloc(&self, _: *mut u8, _: core::alloc::Layout) {}
+                unsafe fn dealloc(
+                    &self,
+                    _: *mut u8,
+                    _: core::alloc::Layout,
+                ) {
+                }
             }
 
             #[cfg(target_os = "solana")]
@@ -34,7 +42,7 @@ macro_rules! basic_panic_impl {
         #[cfg(target_os = "solana")]
         #[no_mangle]
         fn custom_panic(_info: &core::panic::PanicInfo<'_>) {
-            log::sol_log("panicked!");
+            solana_program::log::sol_log("panicked!");
         }
     };
 }

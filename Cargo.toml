@@ -4,3 +4,5 @@ members = ["solana-nostd-entrypoint", "example-program"]
 
 [workspace.dependencies]
 solana-nostd-entrypoint = { path = "./solana-nostd-entrypoint" }
+peregrine-alloc = { path = "./peregrine-alloc" }
+solana-program = "1.18"
