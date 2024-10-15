@@ -14,8 +14,10 @@ repository = "https://github.com/cavemanloverboy/solana-nostd-entrypoint"
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
+solana-program = { workspace = true }
 solana-nostd-entrypoint = { workspace = true }
-solana-program = "1.18.1"
+# solana-pubkey = { git = "https://github.com/anza-xyz/agave.git" }
+# solana-program-error = { git = "https://github.com/anza-xyz/agave.git" }
 
 [dev-dependencies]
 solana-program-test = "1.18.1"

@@ -613,15 +613,67 @@ pub struct InstructionC {
 }
 
 pub struct Ref<'a, T: ?Sized> {
-    value: &'a T,
+    value: NonNull<T>,
     state: NonNull<u8>,
     is_lamport: bool,
+    marker: PhantomData<&'a T>,
+}
+
+impl<'a, T: ?Sized> Ref<'a, T> {
+    #[inline]
+    pub fn map<U: ?Sized, F>(orig: Ref<'a, T>, f: F) -> Ref<'a, U>
+    where
+        F: FnOnce(&T) -> &U,
+    {
+        let state = orig.state;
+        let is_lamport = orig.is_lamport;
+
+        let value = NonNull::from(f(&*orig));
+
+        // stop the decrement via Drop
+        core::mem::forget(orig);
+
+        Ref {
+            state,
+            value,
+            is_lamport,
+            marker: PhantomData,
+        }
+    }
+
+    #[inline]
+    pub fn filter_map<U: ?Sized, F>(
+        orig: Ref<'a, T>,
+        f: F,
+    ) -> Result<Ref<'a, U>, Self>
+    where
+        F: FnOnce(&T) -> Option<&U>,
+    {
+        let state = orig.state;
+        let is_lamport = orig.is_lamport;
+
+        match f(&*orig) {
+            Some(value) => {
+                // stop the decrement via Drop
+                let value = NonNull::from(value);
+                core::mem::forget(orig);
+
+                Ok(Ref {
+                    value,
+                    state,
+                    is_lamport,
+                    marker: PhantomData,
+                })
+            }
+            None => Err(orig),
+        }
+    }
 }
 
 impl<'a, T: ?Sized> core::ops::Deref for Ref<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        self.value
+        unsafe { self.value.as_ref() }
     }
 }
 
@@ -637,21 +689,85 @@ impl<'a, T: ?Sized> Drop for Ref<'a, T> {
     }
 }
 
+impl<'a, T: ?Sized + core::fmt::Debug> core::fmt::Debug for Ref<'a, T> {
+    fn fmt(
+        &self,
+        f: &mut core::fmt::Formatter<'_>,
+    ) -> core::fmt::Result {
+        write!(f, "{:?}", &**self)
+    }
+}
 pub struct RefMut<'a, T: ?Sized> {
-    value: &'a mut T,
+    value: NonNull<T>,
     state: NonNull<u8>,
     is_lamport: bool,
+    // `NonNull` is covariant over `T`, so we need to reintroduce invariance.
+    marker: PhantomData<&'a mut T>,
+}
+
+impl<'a, T: ?Sized> RefMut<'a, T> {
+    #[inline]
+    pub fn map<U: ?Sized, F>(
+        mut orig: RefMut<'a, T>,
+        f: F,
+    ) -> RefMut<'a, U>
+    where
+        F: FnOnce(&mut T) -> &mut U,
+    {
+        let state = orig.state;
+        let is_lamport = orig.is_lamport;
+
+        let value = NonNull::from(f(&mut *orig));
+
+        // stop the decrement via Drop
+        core::mem::forget(orig);
+
+        RefMut {
+            value,
+            state,
+            is_lamport,
+            marker: PhantomData,
+        }
+    }
+
+    #[inline]
+    pub fn filter_map<U: ?Sized, F>(
+        mut orig: RefMut<'a, T>,
+        f: F,
+    ) -> Result<RefMut<'a, U>, Self>
+    where
+        F: FnOnce(&mut T) -> Option<&mut U>,
+    {
+        let state = orig.state;
+        let is_lamport = orig.is_lamport;
+
+        match f(&mut *orig) {
+            Some(value) => {
+                // stop the decrement via Drop
+                let value = NonNull::from(value);
+                core::mem::forget(orig);
+
+                Ok(RefMut {
+                    value,
+                    state,
+                    is_lamport,
+                    marker: PhantomData,
+                })
+            }
+            None => Err(orig),
+        }
+    }
 }
 
 impl<'a, T: ?Sized> core::ops::Deref for RefMut<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        self.value
+        unsafe { self.value.as_ref() }
     }
 }
 impl<'a, T: ?Sized> core::ops::DerefMut for RefMut<'a, T> {
     fn deref_mut(&mut self) -> &mut <Self as core::ops::Deref>::Target {
-        self.value
+        unsafe { self.value.as_mut() }
     }
 }
 
@@ -664,6 +780,17 @@ impl<'a, T: ?Sized> Drop for RefMut<'a, T> {
         } else {
             unsafe { *self.state.as_mut() &= 0b_1111_0111 };
         }
+    }
+}
+
+impl<'a, T: ?Sized + core::fmt::Debug> core::fmt::Debug
+    for RefMut<'a, T>
+{
+    fn fmt(
+        &self,
+        f: &mut core::fmt::Formatter<'_>,
+    ) -> core::fmt::Result {
+        write!(f, "{:?}", &**self)
     }
 }
 
@@ -854,11 +981,12 @@ impl NoStdAccountInfo {
 
         // Return the reference to lamports
         Ok(Ref {
-            value: unsafe { &(*self.inner).lamports },
+            value: unsafe { NonNull::from(&(*self.inner).lamports) },
             state: unsafe {
                 NonNull::new_unchecked(&mut (*self.inner).borrow_state)
             },
             is_lamport: true,
+            marker: PhantomData,
         })
     }
 
@@ -876,11 +1004,14 @@ impl NoStdAccountInfo {
 
         // Return the mutable reference to lamports
         Ok(RefMut {
-            value: unsafe { &mut (*self.inner).lamports },
+            value: unsafe {
+                NonNull::new_unchecked(&mut (*self.inner).lamports)
+            },
             state: unsafe {
                 NonNull::new_unchecked(&mut (*self.inner).borrow_state)
             },
             is_lamport: true,
+            marker: PhantomData,
         })
     }
 
@@ -905,15 +1036,16 @@ impl NoStdAccountInfo {
         // Return the reference to data
         Ok(Ref {
             value: unsafe {
-                core::slice::from_raw_parts(
+                NonNull::from(core::slice::from_raw_parts(
                     self.data_ptr(),
                     (*self.inner).data_len,
-                )
+                ))
             },
             state: unsafe {
                 NonNull::new_unchecked(&mut (*self.inner).borrow_state)
             },
             is_lamport: false,
+            marker: PhantomData,
         })
     }
 
@@ -934,15 +1066,16 @@ impl NoStdAccountInfo {
         // Return the mutable reference to data
         Ok(RefMut {
             value: unsafe {
-                core::slice::from_raw_parts_mut(
+                NonNull::new_unchecked(core::slice::from_raw_parts_mut(
                     self.data_ptr(),
                     (*self.inner).data_len,
-                )
+                ))
             },
             state: unsafe {
                 NonNull::new_unchecked(&mut (*self.inner).borrow_state)
             },
             is_lamport: false,
+            marker: PhantomData,
         })
     }
 
@@ -953,4 +1086,89 @@ impl NoStdAccountInfo {
                 .add(size_of::<NoStdAccountInfoInner>())
         }
     }
+}
+
+#[test]
+fn test_ref() {
+    let lamports_data: [u8; 8] =
+        unsafe { core::mem::transmute([0u64; 1]) };
+    let borrow_state = 1 << 4;
+    let byte_ref: Ref<[u8; 8]> = Ref {
+        value: NonNull::from(&lamports_data),
+        state: NonNull::from(&borrow_state),
+        is_lamport: true,
+        marker: PhantomData,
+    };
+
+    let lamports_ref: Ref<u64> = Ref::map(byte_ref, |b| unsafe {
+        core::mem::transmute::<&[u8; 8], &u64>(b)
+    });
+    assert_eq!(borrow_state, 1 << 4);
+    assert_eq!(*lamports_ref, 0_u64);
+
+    let odd_lamports_ref = Ref::filter_map(lamports_ref, |b| {
+        if *b % 2 == 1 {
+            Some(b)
+        } else {
+            None
+        }
+    });
+    assert_eq!(borrow_state, 1 << 4);
+    assert!(odd_lamports_ref.is_err());
+    let lamports_ref = odd_lamports_ref.unwrap_err();
+    assert_eq!(*lamports_ref, 0_u64);
+
+    let even_lamports_ref = Ref::filter_map(lamports_ref, |b| {
+        if *b % 2 == 0 {
+            Some(b)
+        } else {
+            None
+        }
+    });
+    assert_eq!(borrow_state, 1 << 4);
+    assert_eq!(*even_lamports_ref.unwrap(), 0_u64);
+}
+
+#[test]
+fn test_ref_mut() {
+    let lamports_data: [u8; 8] =
+        unsafe { core::mem::transmute([0u64; 1]) };
+    let borrow_state = 1 << 4;
+    let byte_ref: RefMut<[u8; 8]> = RefMut {
+        value: NonNull::from(&lamports_data),
+        state: NonNull::from(&borrow_state),
+        is_lamport: true,
+        marker: PhantomData,
+    };
+
+    let lamports_ref: RefMut<u64> = RefMut::map(byte_ref, |b| unsafe {
+        core::mem::transmute::<&mut [u8; 8], &mut u64>(b)
+    });
+    assert_eq!(borrow_state, 1 << 4);
+    assert_eq!(*lamports_ref, 0_u64);
+
+    let odd_lamports_ref = RefMut::filter_map(lamports_ref, |b| {
+        if *b % 2 == 1 {
+            Some(b)
+        } else {
+            None
+        }
+    });
+    assert_eq!(borrow_state, 1 << 4);
+    assert!(odd_lamports_ref.is_err());
+
+    let mut lamports_ref = odd_lamports_ref.unwrap_err();
+    assert_eq!(*lamports_ref, 0_u64);
+    *lamports_ref += 2;
+    assert_eq!(*lamports_ref, 2_u64);
+
+    let even_lamports_ref = RefMut::filter_map(lamports_ref, |b| {
+        if *b % 2 == 0 {
+            Some(b)
+        } else {
+            None
+        }
+    });
+    assert_eq!(borrow_state, 1 << 4);
+    assert_eq!(*even_lamports_ref.unwrap(), 2_u64);
 }

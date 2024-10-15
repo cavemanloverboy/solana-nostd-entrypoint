@@ -1,14 +1,16 @@
+#![allow(unexpected_cfgs)]
 use solana_nostd_entrypoint::{
     basic_panic_impl, entrypoint_nostd, noalloc_allocator,
     solana_program::{
-        entrypoint::ProgramResult, log, program_error::ProgramError, pubkey::Pubkey, system_program,
+        entrypoint::ProgramResult, log, program_error::ProgramError,
+        pubkey::Pubkey, system_program,
     },
     InstructionC, NoStdAccountInfo,
 };
 
 entrypoint_nostd!(process_instruction, 32);
 
-pub const ID: Pubkey = solana_nostd_entrypoint::solana_program::pubkey!(
+pub const ID: Pubkey = solana_program::pubkey!(
     "EWUt9PAjn26zCUALRRt56Gutaj52Bpb8ifbf7GZX3h1k"
 );
 
@@ -30,7 +32,8 @@ pub fn process_instruction(
     // Transfer has discriminant 2_u32 (little endian), followed u64 lamport amount
     let mut instruction_data = [0; 12];
     instruction_data[0] = 2;
-    instruction_data[4..12].copy_from_slice(&100_000_000_u64.to_le_bytes());
+    instruction_data[4..12]
+        .copy_from_slice(&100_000_000_u64.to_le_bytes());
 
     // Instruction accounts are are from, to
     let instruction_accounts = [user.to_meta_c(), config.to_meta_c()];
