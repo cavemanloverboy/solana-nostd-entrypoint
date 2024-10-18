@@ -4,7 +4,7 @@ use alloc::rc::Rc;
 use core::{
     cell::RefCell,
     marker::PhantomData,
-    mem::{size_of, MaybeUninit},
+    mem::{size_of, ManuallyDrop, MaybeUninit},
     ptr::NonNull,
     slice::from_raw_parts,
 };
@@ -624,18 +624,13 @@ impl<'a, T: ?Sized> Ref<'a, T> {
     where
         F: FnOnce(&T) -> &U,
     {
-        let state = orig.state;
-        let is_lamport = orig.is_lamport;
-
-        let value = NonNull::from(f(&*orig));
-
-        // stop the decrement via Drop
-        core::mem::forget(orig);
+        // Avoid decrementing the borrow flag on Drop.
+        let orig = ManuallyDrop::new(orig);
 
         Ref {
-            state,
-            value,
-            is_lamport,
+            value: NonNull::from(f(&*orig)),
+            state: orig.state,
+            is_lamport: orig.is_lamport,
             marker: PhantomData,
         }
     }
@@ -648,23 +643,17 @@ impl<'a, T: ?Sized> Ref<'a, T> {
     where
         F: FnOnce(&T) -> Option<&U>,
     {
-        let state = orig.state;
-        let is_lamport = orig.is_lamport;
+        // Avoid decrementing the borrow flag on Drop.
+        let orig = ManuallyDrop::new(orig);
 
         match f(&*orig) {
-            Some(value) => {
-                // stop the decrement via Drop
-                let value = NonNull::from(value);
-                core::mem::forget(orig);
-
-                Ok(Ref {
-                    value,
-                    state,
-                    is_lamport,
-                    marker: PhantomData,
-                })
-            }
-            None => Err(orig),
+            Some(value) => Ok(Ref {
+                value: NonNull::from(value),
+                state: orig.state,
+                is_lamport: orig.is_lamport,
+                marker: PhantomData,
+            }),
+            None => Err(ManuallyDrop::into_inner(orig)),
         }
     }
 }
@@ -706,54 +695,43 @@ pub struct RefMut<'a, T: ?Sized> {
 
 impl<'a, T: ?Sized> RefMut<'a, T> {
     #[inline]
-    pub fn map<U: ?Sized, F>(
-        mut orig: RefMut<'a, T>,
-        f: F,
-    ) -> RefMut<'a, U>
+    pub fn map<U: ?Sized, F>(orig: RefMut<'a, T>, f: F) -> RefMut<'a, U>
     where
         F: FnOnce(&mut T) -> &mut U,
     {
-        let state = orig.state;
-        let is_lamport = orig.is_lamport;
-
-        let value = NonNull::from(f(&mut *orig));
-
-        // stop the decrement via Drop
-        core::mem::forget(orig);
+        // Avoid decrementing the borrow flag on Drop.
+        let mut orig = ManuallyDrop::new(orig);
 
         RefMut {
-            value,
-            state,
-            is_lamport,
+            value: NonNull::from(f(&mut *orig)),
+            state: orig.state,
+            is_lamport: orig.is_lamport,
             marker: PhantomData,
         }
     }
 
     #[inline]
     pub fn filter_map<U: ?Sized, F>(
-        mut orig: RefMut<'a, T>,
+        orig: RefMut<'a, T>,
         f: F,
     ) -> Result<RefMut<'a, U>, Self>
     where
         F: FnOnce(&mut T) -> Option<&mut U>,
     {
-        let state = orig.state;
-        let is_lamport = orig.is_lamport;
+        // Avoid decrementing the mutable borrow flag on Drop.
+        let mut orig = ManuallyDrop::new(orig);
 
         match f(&mut *orig) {
             Some(value) => {
-                // stop the decrement via Drop
                 let value = NonNull::from(value);
-                core::mem::forget(orig);
-
                 Ok(RefMut {
                     value,
-                    state,
-                    is_lamport,
+                    state: orig.state,
+                    is_lamport: orig.is_lamport,
                     marker: PhantomData,
                 })
             }
-            None => Err(orig),
+            None => Err(ManuallyDrop::into_inner(orig)),
         }
     }
 }
