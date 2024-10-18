@@ -42,7 +42,7 @@ macro_rules! basic_panic_impl {
         #[cfg(target_os = "solana")]
         #[no_mangle]
         fn custom_panic(_info: &core::panic::PanicInfo<'_>) {
-            solana_program::log::sol_log("panicked!");
+            $crate::solana_program::log::sol_log("panicked!");
         }
     };
 }
