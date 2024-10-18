@@ -14,11 +14,19 @@ macro_rules! noalloc_allocator {
             extern crate alloc;
             unsafe impl alloc::alloc::GlobalAlloc for NoAlloc {
                 #[inline]
-                unsafe fn alloc(&self, _: core::alloc::Layout) -> *mut u8 {
+                unsafe fn alloc(
+                    &self,
+                    _: core::alloc::Layout,
+                ) -> *mut u8 {
                     panic!("no_alloc :)");
                 }
                 #[inline]
-                unsafe fn dealloc(&self, _: *mut u8, _: core::alloc::Layout) {}
+                unsafe fn dealloc(
+                    &self,
+                    _: *mut u8,
+                    _: core::alloc::Layout,
+                ) {
+                }
             }
 
             #[cfg(target_os = "solana")]

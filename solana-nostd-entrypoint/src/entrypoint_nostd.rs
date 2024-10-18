@@ -4,13 +4,15 @@ use alloc::rc::Rc;
 use core::{
     cell::RefCell,
     marker::PhantomData,
-    mem::{size_of, MaybeUninit},
+    mem::{size_of, ManuallyDrop, MaybeUninit},
     ptr::NonNull,
     slice::from_raw_parts,
 };
 
 use solana_program::{
-    entrypoint::{BPF_ALIGN_OF_U128, MAX_PERMITTED_DATA_INCREASE, NON_DUP_MARKER},
+    entrypoint::{
+        BPF_ALIGN_OF_U128, MAX_PERMITTED_DATA_INCREASE, NON_DUP_MARKER,
+    },
     pubkey::Pubkey,
 };
 
@@ -22,16 +24,21 @@ macro_rules! entrypoint_nostd {
         #[no_mangle]
         pub unsafe extern "C" fn entrypoint(input: *mut u8) -> u64 {
             // Create an array of uninitialized AccountInfos.
-            const UNINIT_INFO: core::mem::MaybeUninit<NoStdAccountInfo> =
-                core::mem::MaybeUninit::uninit();
+            const UNINIT_INFO: core::mem::MaybeUninit<
+                NoStdAccountInfo,
+            > = core::mem::MaybeUninit::uninit();
             let mut accounts = [UNINIT_INFO; $accounts];
 
-            let (program_id, num_accounts, instruction_data) =
-                unsafe { $crate::deserialize_nostd::<$accounts>(input, &mut accounts) };
+            let (program_id, num_accounts, instruction_data) = unsafe {
+                $crate::deserialize_nostd::<$accounts>(
+                    input,
+                    &mut accounts,
+                )
+            };
 
             let account_infos = core::slice::from_raw_parts(
                 accounts.as_ptr() as *const NoStdAccountInfo,
-                num_accounts
+                num_accounts,
             );
 
             match $process_instruction(
@@ -39,7 +46,7 @@ macro_rules! entrypoint_nostd {
                 account_infos,
                 &instruction_data,
             ) {
-                Ok(()) => solana_program::entrypoint::SUCCESS,
+                Ok(()) => 0,
                 Err(error) => error.into(),
             }
         }
@@ -54,21 +61,27 @@ macro_rules! entrypoint_nostd_no_duplicates {
         #[no_mangle]
         pub unsafe extern "C" fn entrypoint(input: *mut u8) -> u64 {
             // Create an array of uninitialized AccountInfos.
-            const UNINIT_INFO: core::mem::MaybeUninit<NoStdAccountInfo> =
-                core::mem::MaybeUninit::uninit();
+            const UNINIT_INFO: core::mem::MaybeUninit<
+                NoStdAccountInfo,
+            > = core::mem::MaybeUninit::uninit();
             let mut accounts = [UNINIT_INFO; $accounts];
 
             let Some((program_id, num_accounts, instruction_data)) =
-                $crate::deserialize_nostd_no_dup::<$accounts>(input, &mut accounts)
+                $crate::deserialize_nostd_no_dup::<$accounts>(
+                    input,
+                    &mut accounts,
+                )
             else {
                 // TODO: better error
-                solana_program::log::sol_log("a duplicate account was found");
+                solana_program::log::sol_log(
+                    "a duplicate account was found",
+                );
                 return u64::MAX;
             };
 
             let account_infos = core::slice::from_raw_parts(
                 accounts.as_ptr() as *const NoStdAccountInfo,
-                num_accounts
+                num_accounts,
             );
 
             match $process_instruction(
@@ -76,7 +89,7 @@ macro_rules! entrypoint_nostd_no_duplicates {
                 account_infos,
                 &instruction_data,
             ) {
-                Ok(()) => solana_program::entrypoint::SUCCESS,
+                Ok(()) => 0,
                 Err(error) => error.into(),
             }
         }
@@ -91,21 +104,25 @@ macro_rules! entrypoint_nostd_no_program {
         #[no_mangle]
         pub unsafe extern "C" fn entrypoint(input: *mut u8) -> u64 {
             // Create an array of uninitialized AccountInfos.
-            const UNINIT_INFO: core::mem::MaybeUninit<NoStdAccountInfo> =
-                core::mem::MaybeUninit::uninit();
+            const UNINIT_INFO: core::mem::MaybeUninit<
+                NoStdAccountInfo,
+            > = core::mem::MaybeUninit::uninit();
             let mut accounts = [UNINIT_INFO; $accounts];
 
-            let (num_accounts, instruction_data) =
-                unsafe { $crate::deserialize_nostd_no_program::<$accounts>(input, &mut accounts) };
-                    
+            let (num_accounts, instruction_data) = unsafe {
+                $crate::deserialize_nostd_no_program::<$accounts>(
+                    input,
+                    &mut accounts,
+                )
+            };
+
             let account_infos = core::slice::from_raw_parts(
                 accounts.as_ptr() as *const NoStdAccountInfo,
-                num_accounts);
-            match $process_instruction(
-                account_infos,
-                &instruction_data,
-            ) {
-                Ok(()) => solana_program::entrypoint::SUCCESS,
+                num_accounts,
+            );
+            match $process_instruction(account_infos, &instruction_data)
+            {
+                Ok(()) => 0,
                 Err(error) => error.into(),
             }
         }
@@ -139,7 +156,7 @@ macro_rules! entrypoint_nostd_no_duplicates_no_program {
                 account_infos,
                 &instruction_data,
             ) {
-                Ok(()) => solana_program::entrypoint::SUCCESS,
+                Ok(()) => 0,
                 Err(error) => error.into(),
             }
         }
@@ -169,12 +186,14 @@ pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
                 // MAGNETAR FIELDS: safety depends on alignment, size
                 // 1) we will always be 8 byte aligned due to align_offset
                 // 2) solana vm serialization format is consistent so size is ok
-                let account_info: *mut NoStdAccountInfoInner = input.add(offset) as *mut _;
+                let account_info: *mut NoStdAccountInfoInner =
+                    input.add(offset) as *mut _;
 
                 offset += size_of::<NoStdAccountInfoInner>();
                 offset += (*account_info).data_len;
                 offset += MAX_PERMITTED_DATA_INCREASE;
-                offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
+                offset += (offset as *const u8)
+                    .align_offset(BPF_ALIGN_OF_U128);
                 offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
 
                 // MAGNETAR FIELDS: reset borrow state right before pushing
@@ -186,7 +205,11 @@ pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
             } else {
                 offset += 8;
                 // Duplicate account, clone the original
-                accounts[i].write(accounts[dup_info as usize].assume_init_ref().clone());
+                accounts[i].write(
+                    accounts[dup_info as usize]
+                        .assume_init_ref()
+                        .clone(),
+                );
             }
         }
 
@@ -196,11 +219,13 @@ pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
         // consumption of having to check the array bounds at each iteration.
         for _ in processed..num_accounts {
             if *(input.add(offset) as *const u8) == NON_DUP_MARKER {
-                let account_info: *mut NoStdAccountInfoInner = input.add(offset) as *mut _;
+                let account_info: *mut NoStdAccountInfoInner =
+                    input.add(offset) as *mut _;
                 offset += size_of::<NoStdAccountInfoInner>();
                 offset += (*account_info).data_len;
                 offset += MAX_PERMITTED_DATA_INCREASE;
-                offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
+                offset += (offset as *const u8)
+                    .align_offset(BPF_ALIGN_OF_U128);
                 offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
             } else {
                 offset += 8;
@@ -215,10 +240,12 @@ pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
 
     // Instruction data
     #[allow(clippy::cast_ptr_alignment)]
-    let instruction_data_len = *(input.add(offset) as *const u64) as usize;
+    let instruction_data_len =
+        *(input.add(offset) as *const u64) as usize;
     offset += size_of::<u64>();
 
-    let instruction_data = { from_raw_parts(input.add(offset), instruction_data_len) };
+    let instruction_data =
+        { from_raw_parts(input.add(offset), instruction_data_len) };
     offset += instruction_data_len;
 
     // Program Id
@@ -229,7 +256,10 @@ pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
 
 /// # Safety
 /// solana entrypoint
-pub unsafe fn deserialize_nostd_no_dup<'a, const MAX_ACCOUNTS: usize>(
+pub unsafe fn deserialize_nostd_no_dup<
+    'a,
+    const MAX_ACCOUNTS: usize,
+>(
     input: *mut u8,
     accounts: &mut [MaybeUninit<NoStdAccountInfo>],
 ) -> Option<(&'a Pubkey, usize, &'a [u8])> {
@@ -252,12 +282,14 @@ pub unsafe fn deserialize_nostd_no_dup<'a, const MAX_ACCOUNTS: usize>(
                 // MAGNETAR FIELDS: safety depends on alignment, size
                 // 1) we will always be 8 byte aligned due to align_offset
                 // 2) solana vm serialization format is consistent so size is ok
-                let account_info: *mut NoStdAccountInfoInner = input.add(offset) as *mut _;
+                let account_info: *mut NoStdAccountInfoInner =
+                    input.add(offset) as *mut _;
 
                 offset += size_of::<NoStdAccountInfoInner>();
                 offset += (*account_info).data_len;
                 offset += MAX_PERMITTED_DATA_INCREASE;
-                offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
+                offset += (offset as *const u8)
+                    .align_offset(BPF_ALIGN_OF_U128);
                 offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
 
                 // MAGNETAR FIELDS: reset borrow state right before pushing
@@ -279,10 +311,12 @@ pub unsafe fn deserialize_nostd_no_dup<'a, const MAX_ACCOUNTS: usize>(
 
     // Instruction data
     #[allow(clippy::cast_ptr_alignment)]
-    let instruction_data_len = *(input.add(offset) as *const u64) as usize;
+    let instruction_data_len =
+        *(input.add(offset) as *const u64) as usize;
     offset += size_of::<u64>();
 
-    let instruction_data = { from_raw_parts(input.add(offset), instruction_data_len) };
+    let instruction_data =
+        { from_raw_parts(input.add(offset), instruction_data_len) };
     offset += instruction_data_len;
 
     // Program Id
@@ -293,7 +327,10 @@ pub unsafe fn deserialize_nostd_no_dup<'a, const MAX_ACCOUNTS: usize>(
 
 /// # Safety
 /// solana entrypoint
-pub unsafe fn deserialize_nostd_no_program<'a, const MAX_ACCOUNTS: usize>(
+pub unsafe fn deserialize_nostd_no_program<
+    'a,
+    const MAX_ACCOUNTS: usize,
+>(
     input: *mut u8,
     accounts: &mut [MaybeUninit<NoStdAccountInfo>],
 ) -> (usize, &'a [u8]) {
@@ -315,12 +352,14 @@ pub unsafe fn deserialize_nostd_no_program<'a, const MAX_ACCOUNTS: usize>(
                 // MAGNETAR FIELDS: safety depends on alignment, size
                 // 1) we will always be 8 byte aligned due to align_offset
                 // 2) solana vm serialization format is consistent so size is ok
-                let account_info: *mut NoStdAccountInfoInner = input.add(offset) as *mut _;
+                let account_info: *mut NoStdAccountInfoInner =
+                    input.add(offset) as *mut _;
 
                 offset += size_of::<NoStdAccountInfoInner>();
                 offset += (*account_info).data_len;
                 offset += MAX_PERMITTED_DATA_INCREASE;
-                offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
+                offset += (offset as *const u8)
+                    .align_offset(BPF_ALIGN_OF_U128);
                 offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
 
                 // MAGNETAR FIELDS: reset borrow state right before pushing
@@ -332,7 +371,11 @@ pub unsafe fn deserialize_nostd_no_program<'a, const MAX_ACCOUNTS: usize>(
             } else {
                 offset += 8;
                 // Duplicate account, clone the original
-                accounts[i].write(accounts[dup_info as usize].assume_init_ref().clone());
+                accounts[i].write(
+                    accounts[dup_info as usize]
+                        .assume_init_ref()
+                        .clone(),
+                );
             }
         }
 
@@ -342,11 +385,13 @@ pub unsafe fn deserialize_nostd_no_program<'a, const MAX_ACCOUNTS: usize>(
         // consumption of having to check the array bounds at each iteration.
         for _ in processed..num_accounts {
             if *(input.add(offset) as *const u8) == NON_DUP_MARKER {
-                let account_info: *mut NoStdAccountInfoInner = input.add(offset) as *mut _;
+                let account_info: *mut NoStdAccountInfoInner =
+                    input.add(offset) as *mut _;
                 offset += size_of::<NoStdAccountInfoInner>();
                 offset += (*account_info).data_len;
                 offset += MAX_PERMITTED_DATA_INCREASE;
-                offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
+                offset += (offset as *const u8)
+                    .align_offset(BPF_ALIGN_OF_U128);
                 offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
             } else {
                 offset += 8;
@@ -361,17 +406,22 @@ pub unsafe fn deserialize_nostd_no_program<'a, const MAX_ACCOUNTS: usize>(
 
     // Instruction data
     #[allow(clippy::cast_ptr_alignment)]
-    let instruction_data_len = *(input.add(offset) as *const u64) as usize;
+    let instruction_data_len =
+        *(input.add(offset) as *const u64) as usize;
     offset += size_of::<u64>();
 
-    let instruction_data = { from_raw_parts(input.add(offset), instruction_data_len) };
+    let instruction_data =
+        { from_raw_parts(input.add(offset), instruction_data_len) };
 
     (processed, instruction_data)
 }
 
 /// # Safety
 /// solana entrypoint
-pub unsafe fn deserialize_nostd_no_dup_no_program<'a, const MAX_ACCOUNTS: usize>(
+pub unsafe fn deserialize_nostd_no_dup_no_program<
+    'a,
+    const MAX_ACCOUNTS: usize,
+>(
     input: *mut u8,
     accounts: &mut [MaybeUninit<NoStdAccountInfo>],
 ) -> Option<(usize, &'a [u8])> {
@@ -394,12 +444,14 @@ pub unsafe fn deserialize_nostd_no_dup_no_program<'a, const MAX_ACCOUNTS: usize>
                 // MAGNETAR FIELDS: safety depends on alignment, size
                 // 1) we will always be 8 byte aligned due to align_offset
                 // 2) solana vm serialization format is consistent so size is ok
-                let account_info: *mut NoStdAccountInfoInner = input.add(offset) as *mut _;
+                let account_info: *mut NoStdAccountInfoInner =
+                    input.add(offset) as *mut _;
 
                 offset += size_of::<NoStdAccountInfoInner>();
                 offset += (*account_info).data_len;
                 offset += MAX_PERMITTED_DATA_INCREASE;
-                offset += (offset as *const u8).align_offset(BPF_ALIGN_OF_U128);
+                offset += (offset as *const u8)
+                    .align_offset(BPF_ALIGN_OF_U128);
                 offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
 
                 // MAGNETAR FIELDS: reset borrow state right before pushing
@@ -421,10 +473,12 @@ pub unsafe fn deserialize_nostd_no_dup_no_program<'a, const MAX_ACCOUNTS: usize>
 
     // Instruction data
     #[allow(clippy::cast_ptr_alignment)]
-    let instruction_data_len = *(input.add(offset) as *const u64) as usize;
+    let instruction_data_len =
+        *(input.add(offset) as *const u64) as usize;
     offset += size_of::<u64>();
 
-    let instruction_data = { from_raw_parts(input.add(offset), instruction_data_len) };
+    let instruction_data =
+        { from_raw_parts(input.add(offset), instruction_data_len) };
 
     Some((processed, instruction_data))
 }
@@ -558,15 +612,56 @@ pub struct InstructionC {
 }
 
 pub struct Ref<'a, T: ?Sized> {
-    value: &'a T,
+    value: NonNull<T>,
     state: NonNull<u8>,
     is_lamport: bool,
+    marker: PhantomData<&'a T>,
+}
+
+impl<'a, T: ?Sized> Ref<'a, T> {
+    #[inline]
+    pub fn map<U: ?Sized, F>(orig: Ref<'a, T>, f: F) -> Ref<'a, U>
+    where
+        F: FnOnce(&T) -> &U,
+    {
+        // Avoid decrementing the borrow flag on Drop.
+        let orig = ManuallyDrop::new(orig);
+
+        Ref {
+            value: NonNull::from(f(&*orig)),
+            state: orig.state,
+            is_lamport: orig.is_lamport,
+            marker: PhantomData,
+        }
+    }
+
+    #[inline]
+    pub fn filter_map<U: ?Sized, F>(
+        orig: Ref<'a, T>,
+        f: F,
+    ) -> Result<Ref<'a, U>, Self>
+    where
+        F: FnOnce(&T) -> Option<&U>,
+    {
+        // Avoid decrementing the borrow flag on Drop.
+        let orig = ManuallyDrop::new(orig);
+
+        match f(&*orig) {
+            Some(value) => Ok(Ref {
+                value: NonNull::from(value),
+                state: orig.state,
+                is_lamport: orig.is_lamport,
+                marker: PhantomData,
+            }),
+            None => Err(ManuallyDrop::into_inner(orig)),
+        }
+    }
 }
 
 impl<'a, T: ?Sized> core::ops::Deref for Ref<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        self.value
+        unsafe { self.value.as_ref() }
     }
 }
 
@@ -582,21 +677,74 @@ impl<'a, T: ?Sized> Drop for Ref<'a, T> {
     }
 }
 
+impl<'a, T: ?Sized + core::fmt::Debug> core::fmt::Debug for Ref<'a, T> {
+    fn fmt(
+        &self,
+        f: &mut core::fmt::Formatter<'_>,
+    ) -> core::fmt::Result {
+        write!(f, "{:?}", &**self)
+    }
+}
 pub struct RefMut<'a, T: ?Sized> {
-    value: &'a mut T,
+    value: NonNull<T>,
     state: NonNull<u8>,
     is_lamport: bool,
+    // `NonNull` is covariant over `T`, so we need to reintroduce invariance.
+    marker: PhantomData<&'a mut T>,
+}
+
+impl<'a, T: ?Sized> RefMut<'a, T> {
+    #[inline]
+    pub fn map<U: ?Sized, F>(orig: RefMut<'a, T>, f: F) -> RefMut<'a, U>
+    where
+        F: FnOnce(&mut T) -> &mut U,
+    {
+        // Avoid decrementing the borrow flag on Drop.
+        let mut orig = ManuallyDrop::new(orig);
+
+        RefMut {
+            value: NonNull::from(f(&mut *orig)),
+            state: orig.state,
+            is_lamport: orig.is_lamport,
+            marker: PhantomData,
+        }
+    }
+
+    #[inline]
+    pub fn filter_map<U: ?Sized, F>(
+        orig: RefMut<'a, T>,
+        f: F,
+    ) -> Result<RefMut<'a, U>, Self>
+    where
+        F: FnOnce(&mut T) -> Option<&mut U>,
+    {
+        // Avoid decrementing the mutable borrow flag on Drop.
+        let mut orig = ManuallyDrop::new(orig);
+
+        match f(&mut *orig) {
+            Some(value) => {
+                let value = NonNull::from(value);
+                Ok(RefMut {
+                    value,
+                    state: orig.state,
+                    is_lamport: orig.is_lamport,
+                    marker: PhantomData,
+                })
+            }
+            None => Err(ManuallyDrop::into_inner(orig)),
+        }
+    }
 }
 
 impl<'a, T: ?Sized> core::ops::Deref for RefMut<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        self.value
+        unsafe { self.value.as_ref() }
     }
 }
 impl<'a, T: ?Sized> core::ops::DerefMut for RefMut<'a, T> {
     fn deref_mut(&mut self) -> &mut <Self as core::ops::Deref>::Target {
-        self.value
+        unsafe { self.value.as_mut() }
     }
 }
 
@@ -609,6 +757,17 @@ impl<'a, T: ?Sized> Drop for RefMut<'a, T> {
         } else {
             unsafe { *self.state.as_mut() &= 0b_1111_0111 };
         }
+    }
+}
+
+impl<'a, T: ?Sized + core::fmt::Debug> core::fmt::Debug
+    for RefMut<'a, T>
+{
+    fn fmt(
+        &self,
+        f: &mut core::fmt::Formatter<'_>,
+    ) -> core::fmt::Result {
+        write!(f, "{:?}", &**self)
     }
 }
 
@@ -764,13 +923,19 @@ impl NoStdAccountInfo {
     /// # Safety
     /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
     pub unsafe fn unchecked_borrow_data(&self) -> &[u8] {
-        core::slice::from_raw_parts(self.data_ptr(), (*self.inner).data_len)
+        core::slice::from_raw_parts(
+            self.data_ptr(),
+            (*self.inner).data_len,
+        )
     }
     /// # Safety
     /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
     #[allow(clippy::mut_from_ref)]
     pub unsafe fn unchecked_borrow_mut_data(&self) -> &mut [u8] {
-        core::slice::from_raw_parts_mut(self.data_ptr(), (*self.inner).data_len)
+        core::slice::from_raw_parts_mut(
+            self.data_ptr(),
+            (*self.inner).data_len,
+        )
     }
 
     /// Tries to get a read only reference to the lamport field, failing if the field is already mutable borrowed or
@@ -793,9 +958,12 @@ impl NoStdAccountInfo {
 
         // Return the reference to lamports
         Some(Ref {
-            value: unsafe { &(*self.inner).lamports },
-            state: unsafe { NonNull::new_unchecked(&mut (*self.inner).borrow_state) },
+            value: unsafe { NonNull::from(&(*self.inner).lamports) },
+            state: unsafe {
+                NonNull::new_unchecked(&mut (*self.inner).borrow_state)
+            },
             is_lamport: true,
+            marker: PhantomData,
         })
     }
 
@@ -813,9 +981,14 @@ impl NoStdAccountInfo {
 
         // Return the mutable reference to lamports
         Some(RefMut {
-            value: unsafe { &mut (*self.inner).lamports },
-            state: unsafe { NonNull::new_unchecked(&mut (*self.inner).borrow_state) },
+            value: unsafe {
+                NonNull::new_unchecked(&mut (*self.inner).lamports)
+            },
+            state: unsafe {
+                NonNull::new_unchecked(&mut (*self.inner).borrow_state)
+            },
             is_lamport: true,
+            marker: PhantomData,
         })
     }
 
@@ -839,9 +1012,17 @@ impl NoStdAccountInfo {
 
         // Return the reference to data
         Some(Ref {
-            value: unsafe { core::slice::from_raw_parts(self.data_ptr(), (*self.inner).data_len) },
-            state: unsafe { NonNull::new_unchecked(&mut (*self.inner).borrow_state) },
+            value: unsafe {
+                NonNull::from(core::slice::from_raw_parts(
+                    self.data_ptr(),
+                    (*self.inner).data_len,
+                ))
+            },
+            state: unsafe {
+                NonNull::new_unchecked(&mut (*self.inner).borrow_state)
+            },
             is_lamport: false,
+            marker: PhantomData,
         })
     }
 
@@ -862,15 +1043,109 @@ impl NoStdAccountInfo {
         // Return the mutable reference to data
         Some(RefMut {
             value: unsafe {
-                core::slice::from_raw_parts_mut(self.data_ptr(), (*self.inner).data_len)
+                NonNull::new_unchecked(core::slice::from_raw_parts_mut(
+                    self.data_ptr(),
+                    (*self.inner).data_len,
+                ))
             },
-            state: unsafe { NonNull::new_unchecked(&mut (*self.inner).borrow_state) },
+            state: unsafe {
+                NonNull::new_unchecked(&mut (*self.inner).borrow_state)
+            },
             is_lamport: false,
+            marker: PhantomData,
         })
     }
 
     /// Private: gets the memory addr of the account data
     fn data_ptr(&self) -> *mut u8 {
-        unsafe { (self.inner as *const _ as *mut u8).add(size_of::<NoStdAccountInfoInner>()) }
+        unsafe {
+            (self.inner as *const _ as *mut u8)
+                .add(size_of::<NoStdAccountInfoInner>())
+        }
     }
+}
+
+#[test]
+fn test_ref() {
+    let lamports_data: [u8; 8] =
+        unsafe { core::mem::transmute([0u64; 1]) };
+    let borrow_state = 1 << 4;
+    let byte_ref: Ref<[u8; 8]> = Ref {
+        value: NonNull::from(&lamports_data),
+        state: NonNull::from(&borrow_state),
+        is_lamport: true,
+        marker: PhantomData,
+    };
+
+    let lamports_ref: Ref<u64> = Ref::map(byte_ref, |b| unsafe {
+        core::mem::transmute::<&[u8; 8], &u64>(b)
+    });
+    assert_eq!(borrow_state, 1 << 4);
+    assert_eq!(*lamports_ref, 0_u64);
+
+    let odd_lamports_ref = Ref::filter_map(lamports_ref, |b| {
+        if *b % 2 == 1 {
+            Some(b)
+        } else {
+            None
+        }
+    });
+    assert_eq!(borrow_state, 1 << 4);
+    assert!(odd_lamports_ref.is_err());
+    let lamports_ref = odd_lamports_ref.unwrap_err();
+    assert_eq!(*lamports_ref, 0_u64);
+
+    let even_lamports_ref = Ref::filter_map(lamports_ref, |b| {
+        if *b % 2 == 0 {
+            Some(b)
+        } else {
+            None
+        }
+    });
+    assert_eq!(borrow_state, 1 << 4);
+    assert_eq!(*even_lamports_ref.unwrap(), 0_u64);
+}
+
+#[test]
+fn test_ref_mut() {
+    let lamports_data: [u8; 8] =
+        unsafe { core::mem::transmute([0u64; 1]) };
+    let borrow_state = 1 << 4;
+    let byte_ref: RefMut<[u8; 8]> = RefMut {
+        value: NonNull::from(&lamports_data),
+        state: NonNull::from(&borrow_state),
+        is_lamport: true,
+        marker: PhantomData,
+    };
+
+    let lamports_ref: RefMut<u64> = RefMut::map(byte_ref, |b| unsafe {
+        core::mem::transmute::<&mut [u8; 8], &mut u64>(b)
+    });
+    assert_eq!(borrow_state, 1 << 4);
+    assert_eq!(*lamports_ref, 0_u64);
+
+    let odd_lamports_ref = RefMut::filter_map(lamports_ref, |b| {
+        if *b % 2 == 1 {
+            Some(b)
+        } else {
+            None
+        }
+    });
+    assert_eq!(borrow_state, 1 << 4);
+    assert!(odd_lamports_ref.is_err());
+
+    let mut lamports_ref = odd_lamports_ref.unwrap_err();
+    assert_eq!(*lamports_ref, 0_u64);
+    *lamports_ref += 2;
+    assert_eq!(*lamports_ref, 2_u64);
+
+    let even_lamports_ref = RefMut::filter_map(lamports_ref, |b| {
+        if *b % 2 == 0 {
+            Some(b)
+        } else {
+            None
+        }
+    });
+    assert_eq!(borrow_state, 1 << 4);
+    assert_eq!(*even_lamports_ref.unwrap(), 2_u64);
 }
