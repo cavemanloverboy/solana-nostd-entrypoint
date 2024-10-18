@@ -6,13 +6,15 @@ use core::{
     marker::PhantomData,
     mem::{size_of, ManuallyDrop, MaybeUninit},
     ptr::NonNull,
-    slice::from_raw_parts,
+    slice::{from_raw_parts, from_raw_parts_mut},
 };
 
 use solana_program::{
     entrypoint::{
         BPF_ALIGN_OF_U128, MAX_PERMITTED_DATA_INCREASE, NON_DUP_MARKER,
     },
+    program_error::ProgramError,
+    program_memory::sol_memset,
     pubkey::Pubkey,
     program_error::ProgramError
 };
@@ -1055,6 +1057,83 @@ impl NoStdAccountInfo {
             is_lamport: false,
             marker: PhantomData,
         })
+    }
+
+    /// Return the account's original data length when it was serialized for the
+    /// current program invocation.
+    ///
+    /// # Safety
+    ///
+    /// This method assumes that the original data length was serialized as a u32
+    /// integer in the 4 bytes immediately preceding the serialized account key.
+    pub unsafe fn original_data_len(&self) -> usize {
+        let key_ptr = &(*self.inner).key as *const _ as *const u8;
+        let original_data_len_ptr = key_ptr.offset(-4) as *const u32;
+        *original_data_len_ptr as usize
+    }
+
+    /// Realloc the account's data and optionally zero-initialize the new
+    /// memory.
+    ///
+    /// Note:  Account data can be increased within a single call by up to
+    /// `solana_program::entrypoint::MAX_PERMITTED_DATA_INCREASE` bytes.
+    ///
+    /// Note: Memory used to grow is already zero-initialized upon program
+    /// entrypoint and re-zeroing it wastes compute units.  If within the same
+    /// call a program reallocs from larger to smaller and back to larger again
+    /// the new space could contain stale data.  Pass `true` for `zero_init` in
+    /// this case, otherwise compute units will be wasted re-zero-initializing.
+    ///
+    /// # Safety
+    ///
+    /// This method makes assumptions about the layout and location of memory
+    /// referenced by `AccountInfo` fields. It should only be called for
+    /// instances of `AccountInfo` that were created by the runtime and received
+    /// in the `process_instruction` entrypoint of a program.
+    pub fn realloc(
+        &self,
+        new_len: usize,
+        zero_init: bool,
+    ) -> Result<(), ProgramError> {
+        let Some(mut data) = self.try_borrow_mut_data() else {
+            return Err(ProgramError::AccountBorrowFailed);
+        };
+        let old_len = data.len();
+
+        // Return early if length hasn't changed
+        if new_len == old_len {
+            return Ok(());
+        }
+
+        // Return early if the length increase from the original serialized data
+        // length is too large and would result in an out of bounds allocation.
+        let original_data_len = unsafe { self.original_data_len() };
+        if new_len.saturating_sub(original_data_len)
+            > MAX_PERMITTED_DATA_INCREASE
+        {
+            return Err(ProgramError::InvalidRealloc);
+        }
+
+        // realloc
+        unsafe {
+            let data_ptr = data.as_mut_ptr();
+
+            // First set new length in the serialized data
+            *(data_ptr.offset(-8) as *mut u64) = new_len as u64;
+
+            // Then recreate the local slice with the new length
+            data.value =
+                NonNull::from(from_raw_parts_mut(data_ptr, new_len));
+        }
+
+        if zero_init {
+            let len_increase = new_len.saturating_sub(old_len);
+            if len_increase > 0 {
+                sol_memset(&mut data[old_len..], 0, len_increase);
+            }
+        }
+
+        Ok(())
     }
 
     /// Private: gets the memory addr of the account data
