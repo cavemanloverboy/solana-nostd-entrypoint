@@ -16,7 +16,6 @@ use solana_program::{
     program_error::ProgramError,
     program_memory::sol_memset,
     pubkey::Pubkey,
-    program_error::ProgramError
 };
 
 #[macro_export]
@@ -514,7 +513,7 @@ pub struct NoStdAccountInfoInner {
     /// This account's data contains a loaded program (and is now read-only)
     executable: u8,
 
-    padding: u32,
+    realloc_byte_counter: u32,
 
     /// Public key of the account
     key: Pubkey,
@@ -943,7 +942,9 @@ impl NoStdAccountInfo {
 
     /// Tries to get a read only reference to the lamport field, failing if the field is already mutable borrowed or
     /// if 7 borrows already exist.
-    pub fn try_borrow_lamports(&self) -> Result<Ref<u64>, ProgramError> {
+    pub fn try_borrow_lamports(
+        &self,
+    ) -> Result<Ref<u64>, ProgramError> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
         // Check if mutable borrow is already taken
@@ -971,7 +972,9 @@ impl NoStdAccountInfo {
     }
 
     /// Tries to get a read only reference to the lamport field, failing if the field is already borrowed in any form.
-    pub fn try_borrow_mut_lamports(&self) -> Result<RefMut<u64>, ProgramError> {
+    pub fn try_borrow_mut_lamports(
+        &self,
+    ) -> Result<RefMut<u64>, ProgramError> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
         // Check if any borrow (mutable or immutable) is already taken for lamports
@@ -1030,7 +1033,9 @@ impl NoStdAccountInfo {
     }
 
     /// Tries to get a read only reference to the data field, failing if the field is already borrowed in any form.
-    pub fn try_borrow_mut_data(&self) -> Result<RefMut<[u8]>, ProgramError> {
+    pub fn try_borrow_mut_data(
+        &self,
+    ) -> Result<RefMut<[u8]>, ProgramError> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
         // Check if any borrow (mutable or immutable) is already taken for data
@@ -1059,19 +1064,6 @@ impl NoStdAccountInfo {
         })
     }
 
-    /// Return the account's original data length when it was serialized for the
-    /// current program invocation.
-    ///
-    /// # Safety
-    ///
-    /// This method assumes that the original data length was serialized as a u32
-    /// integer in the 4 bytes immediately preceding the serialized account key.
-    pub unsafe fn original_data_len(&self) -> usize {
-        let key_ptr = &(*self.inner).key as *const _ as *const u8;
-        let original_data_len_ptr = key_ptr.offset(-4) as *const u32;
-        *original_data_len_ptr as usize
-    }
-
     /// Realloc the account's data and optionally zero-initialize the new
     /// memory.
     ///
@@ -1095,9 +1087,7 @@ impl NoStdAccountInfo {
         new_len: usize,
         zero_init: bool,
     ) -> Result<(), ProgramError> {
-        let Some(mut data) = self.try_borrow_mut_data() else {
-            return Err(ProgramError::AccountBorrowFailed);
-        };
+        let mut data = self.try_borrow_mut_data()?;
         let old_len = data.len();
 
         // Return early if length hasn't changed
@@ -1105,9 +1095,20 @@ impl NoStdAccountInfo {
             return Ok(());
         }
 
+        let original_data_len = match unsafe {
+            (*self.inner).realloc_byte_counter
+        } {
+            len if len > 0 => len as usize,
+            _ => {
+                unsafe {
+                    (*self.inner).realloc_byte_counter = old_len as u32
+                };
+                old_len
+            }
+        };
+
         // Return early if the length increase from the original serialized data
         // length is too large and would result in an out of bounds allocation.
-        let original_data_len = unsafe { self.original_data_len() };
         if new_len.saturating_sub(original_data_len)
             > MAX_PERMITTED_DATA_INCREASE
         {
