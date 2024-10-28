@@ -1113,7 +1113,9 @@ impl NoStdAccountInfo {
                     // Check diff
                     (*self.inner).realloc_byte_counter +=
                         TryInto::<i32>::try_into(new_len - old_len)
-                            .expect("realloc: invalid new len");
+                            .map_err(|_| {
+                                ProgramError::InvalidRealloc
+                            })?;
 
                     // Check to see if we've exceeded max realloc across all invocations
                     if (*self.inner).realloc_byte_counter
