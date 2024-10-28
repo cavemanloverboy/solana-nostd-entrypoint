@@ -304,6 +304,25 @@ pub unsafe fn deserialize_nostd_no_dup<
             }
         }
 
+        // Skip any remaining accounts (if any) that we don't have space to include.
+        //
+        // This duplicates the logic of parsing accounts but avoids the extra CU
+        // consumption of having to check the array bounds at each iteration.
+        for _ in processed..num_accounts {
+            if *(input.add(offset) as *const u8) == NON_DUP_MARKER {
+                let account_info: *mut NoStdAccountInfoInner =
+                    input.add(offset) as *mut _;
+                offset += size_of::<NoStdAccountInfoInner>();
+                offset += (*account_info).data_len;
+                offset += MAX_PERMITTED_DATA_INCREASE;
+                offset += (offset as *const u8)
+                    .align_offset(BPF_ALIGN_OF_U128);
+                offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
+            } else {
+                offset += 8;
+            }
+        }
+
         processed
     } else {
         // there were not accounts on the input
@@ -463,6 +482,25 @@ pub unsafe fn deserialize_nostd_no_dup_no_program<
                 });
             } else {
                 return None;
+            }
+        }
+
+        // Skip any remaining accounts (if any) that we don't have space to include.
+        //
+        // This duplicates the logic of parsing accounts but avoids the extra CU
+        // consumption of having to check the array bounds at each iteration.
+        for _ in processed..num_accounts {
+            if *(input.add(offset) as *const u8) == NON_DUP_MARKER {
+                let account_info: *mut NoStdAccountInfoInner =
+                    input.add(offset) as *mut _;
+                offset += size_of::<NoStdAccountInfoInner>();
+                offset += (*account_info).data_len;
+                offset += MAX_PERMITTED_DATA_INCREASE;
+                offset += (offset as *const u8)
+                    .align_offset(BPF_ALIGN_OF_U128);
+                offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
+            } else {
+                offset += 8;
             }
         }
 

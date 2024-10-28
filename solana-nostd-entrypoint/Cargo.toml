@@ -1,6 +1,6 @@
 [package]
 name = "solana-nostd-entrypoint"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 description = "A zerocopy, no_alloc/no_std entrypoint for solana programs."
 license = "MIT OR Apache-2.0"
