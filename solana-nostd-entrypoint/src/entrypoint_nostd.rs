@@ -6,7 +6,7 @@ use core::{
     marker::PhantomData,
     mem::{size_of, ManuallyDrop, MaybeUninit},
     ptr::NonNull,
-    slice::{from_raw_parts, from_raw_parts_mut},
+    slice::from_raw_parts,
 };
 
 use solana_program::{
@@ -513,7 +513,7 @@ pub struct NoStdAccountInfoInner {
     /// This account's data contains a loaded program (and is now read-only)
     executable: u8,
 
-    realloc_byte_counter: u32,
+    realloc_byte_counter: i32,
 
     /// Public key of the account
     key: Pubkey,
@@ -1091,46 +1091,51 @@ impl NoStdAccountInfo {
         let old_len = data.len();
 
         // Return early if length hasn't changed
-        if new_len == old_len {
-            return Ok(());
-        }
+        match new_len.cmp(&old_len) {
+            // Nothing to do
+            core::cmp::Ordering::Equal => return Ok(()),
 
-        let original_data_len = match unsafe {
-            (*self.inner).realloc_byte_counter
-        } {
-            len if len > 0 => len as usize,
-            _ => {
+            // No checks
+            // Old len fits in an i32, and new_len is smaller so new len fits in i32.
+            core::cmp::Ordering::Less => {
                 unsafe {
-                    (*self.inner).realloc_byte_counter = old_len as u32
+                    (*self.inner).realloc_byte_counter -=
+                        (old_len - new_len) as i32;
+
+                    // Set new length in the serialized data
+                    (*self.inner).data_len = new_len;
                 };
-                old_len
             }
-        };
 
-        // Return early if the length increase from the original serialized data
-        // length is too large and would result in an out of bounds allocation.
-        if new_len.saturating_sub(original_data_len)
-            > MAX_PERMITTED_DATA_INCREASE
-        {
-            return Err(ProgramError::InvalidRealloc);
-        }
+            // Need to check that the diff fits in an i32 and that max realloc has not been reached
+            core::cmp::Ordering::Greater => {
+                unsafe {
+                    // Check diff
+                    (*self.inner).realloc_byte_counter +=
+                        TryInto::<i32>::try_into(new_len - old_len)
+                            .expect("realloc: invalid new len");
 
-        // realloc
-        unsafe {
-            let data_ptr = data.as_mut_ptr();
+                    // Check to see if we've exceeded max realloc across all invocations
+                    if (*self.inner).realloc_byte_counter
+                        > MAX_PERMITTED_DATA_INCREASE as i32
+                    {
+                        return Err(ProgramError::InvalidRealloc);
+                    }
 
-            // First set new length in the serialized data
-            *(data_ptr.offset(-8) as *mut u64) = new_len as u64;
+                    // Set new length in the serialized data
+                    (*self.inner).data_len = new_len;
 
-            // Then recreate the local slice with the new length
-            data.value =
-                NonNull::from(from_raw_parts_mut(data_ptr, new_len));
-        }
-
-        if zero_init {
-            let len_increase = new_len.saturating_sub(old_len);
-            if len_increase > 0 {
-                sol_memset(&mut data[old_len..], 0, len_increase);
+                    // Zero init if specified
+                    if zero_init {
+                        let len_increase = new_len - old_len;
+                        let new_data_slice =
+                            core::slice::from_raw_parts_mut(
+                                data.as_mut_ptr().add(old_len),
+                                len_increase,
+                            );
+                        sol_memset(new_data_slice, 0, len_increase);
+                    }
+                }
             }
         }
 

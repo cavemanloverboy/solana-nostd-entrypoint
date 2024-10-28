@@ -490,19 +490,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "block-alloc-program"
-version = "0.1.0"
-dependencies = [
- "peregrine-alloc",
- "solana-logger 2.0.11",
- "solana-nostd-entrypoint",
- "solana-program",
- "solana-program-test",
- "solana-sdk",
- "tokio",
-]
-
-[[package]]
 name = "block-buffer"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2577,13 +2564,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "peregrine-alloc"
-version = "0.1.0"
-dependencies = [
- "solana-nostd-entrypoint",
-]
-
-[[package]]
 name = "pin-project"
 version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3856,17 +3836,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "solana-logger"
-version = "2.0.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c94ce4da36c6b28b6d741cbd99bf4238b8ae93ce0c8f8c72225faa21a140645e"
-dependencies = [
- "env_logger",
- "lazy_static",
- "log",
-]
-
-[[package]]
 name = "solana-measure"
 version = "1.18.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3906,7 +3875,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "socket2",
- "solana-logger 1.18.23",
+ "solana-logger",
  "solana-sdk",
  "solana-version",
  "tokio",
@@ -3921,7 +3890,7 @@ checksum = "8b8a731ed60e89177c8a7ab05fe0f1511cedd3e70e773f288f9de33a9cfdc21e"
 
 [[package]]
 name = "solana-nostd-entrypoint"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "solana-program",
 ]
@@ -4068,7 +4037,7 @@ dependencies = [
  "solana-banks-interface",
  "solana-banks-server",
  "solana-bpf-loader-program",
- "solana-logger 1.18.23",
+ "solana-logger",
  "solana-program-runtime",
  "solana-runtime",
  "solana-sdk",
@@ -4345,7 +4314,7 @@ dependencies = [
  "siphasher",
  "solana-frozen-abi",
  "solana-frozen-abi-macro",
- "solana-logger 1.18.23",
+ "solana-logger",
  "solana-program",
  "solana-sdk-macro",
  "thiserror",
