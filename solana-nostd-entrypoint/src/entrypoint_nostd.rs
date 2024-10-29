@@ -1111,21 +1111,20 @@ impl NoStdAccountInfo {
             core::cmp::Ordering::Greater => {
                 unsafe {
                     // Check diff
-                    (*self.inner).realloc_byte_counter +=
-                        TryInto::<i32>::try_into(new_len - old_len)
-                            .map_err(|_| {
-                                ProgramError::InvalidRealloc
-                            })?;
+                    let new_counter = (*self.inner)
+                        .realloc_byte_counter
+                        + TryInto::<i32>::try_into(new_len - old_len)
+                            .map_err(|_| ProgramError::InvalidRealloc)?;
 
                     // Check to see if we've exceeded max realloc across all invocations
-                    if (*self.inner).realloc_byte_counter
-                        > MAX_PERMITTED_DATA_INCREASE as i32
+                    if new_counter > MAX_PERMITTED_DATA_INCREASE as i32
                     {
                         return Err(ProgramError::InvalidRealloc);
                     }
 
-                    // Set new length in the serialized data
+                    // Set new length and new counter in the serialized data after all validation
                     (*self.inner).data_len = new_len;
+                    (*self.inner).realloc_byte_counter = new_counter;
 
                     // Zero init if specified
                     if zero_init {
