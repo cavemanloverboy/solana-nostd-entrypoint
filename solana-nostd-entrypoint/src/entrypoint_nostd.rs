@@ -13,8 +13,9 @@ use solana_program::{
     entrypoint::{
         BPF_ALIGN_OF_U128, MAX_PERMITTED_DATA_INCREASE, NON_DUP_MARKER,
     },
+    program_error::ProgramError,
+    program_memory::sol_memset,
     pubkey::Pubkey,
-    program_error::ProgramError
 };
 
 #[macro_export]
@@ -550,7 +551,7 @@ pub struct NoStdAccountInfoInner {
     /// This account's data contains a loaded program (and is now read-only)
     executable: u8,
 
-    padding: u32,
+    realloc_byte_counter: i32,
 
     /// Public key of the account
     key: Pubkey,
@@ -979,7 +980,9 @@ impl NoStdAccountInfo {
 
     /// Tries to get a read only reference to the lamport field, failing if the field is already mutable borrowed or
     /// if 7 borrows already exist.
-    pub fn try_borrow_lamports(&self) -> Result<Ref<u64>, ProgramError> {
+    pub fn try_borrow_lamports(
+        &self,
+    ) -> Result<Ref<u64>, ProgramError> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
         // Check if mutable borrow is already taken
@@ -1007,7 +1010,9 @@ impl NoStdAccountInfo {
     }
 
     /// Tries to get a read only reference to the lamport field, failing if the field is already borrowed in any form.
-    pub fn try_borrow_mut_lamports(&self) -> Result<RefMut<u64>, ProgramError> {
+    pub fn try_borrow_mut_lamports(
+        &self,
+    ) -> Result<RefMut<u64>, ProgramError> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
         // Check if any borrow (mutable or immutable) is already taken for lamports
@@ -1066,7 +1071,9 @@ impl NoStdAccountInfo {
     }
 
     /// Tries to get a read only reference to the data field, failing if the field is already borrowed in any form.
-    pub fn try_borrow_mut_data(&self) -> Result<RefMut<[u8]>, ProgramError> {
+    pub fn try_borrow_mut_data(
+        &self,
+    ) -> Result<RefMut<[u8]>, ProgramError> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
         // Check if any borrow (mutable or immutable) is already taken for data
@@ -1093,6 +1100,85 @@ impl NoStdAccountInfo {
             is_lamport: false,
             marker: PhantomData,
         })
+    }
+
+    /// Realloc the account's data and optionally zero-initialize the new
+    /// memory.
+    ///
+    /// Note:  Account data can be increased within a single call by up to
+    /// `solana_program::entrypoint::MAX_PERMITTED_DATA_INCREASE` bytes.
+    ///
+    /// Note: Memory used to grow is already zero-initialized upon program
+    /// entrypoint and re-zeroing it wastes compute units.  If within the same
+    /// call a program reallocs from larger to smaller and back to larger again
+    /// the new space could contain stale data.  Pass `true` for `zero_init` in
+    /// this case, otherwise compute units will be wasted re-zero-initializing.
+    ///
+    /// # Safety
+    ///
+    /// This method makes assumptions about the layout and location of memory
+    /// referenced by `AccountInfo` fields. It should only be called for
+    /// instances of `AccountInfo` that were created by the runtime and received
+    /// in the `process_instruction` entrypoint of a program.
+    pub fn realloc(
+        &self,
+        new_len: usize,
+        zero_init: bool,
+    ) -> Result<(), ProgramError> {
+        let mut data = self.try_borrow_mut_data()?;
+        let old_len = data.len();
+
+        // Return early if length hasn't changed
+        match new_len.cmp(&old_len) {
+            // Nothing to do
+            core::cmp::Ordering::Equal => return Ok(()),
+
+            // No checks
+            // Old len fits in an i32, and new_len is smaller so new len fits in i32.
+            core::cmp::Ordering::Less => {
+                unsafe {
+                    (*self.inner).realloc_byte_counter -=
+                        (old_len - new_len) as i32;
+
+                    // Set new length in the serialized data
+                    (*self.inner).data_len = new_len;
+                };
+            }
+
+            // Need to check that the diff fits in an i32 and that max realloc has not been reached
+            core::cmp::Ordering::Greater => {
+                unsafe {
+                    // Check diff
+                    let new_counter = (*self.inner)
+                        .realloc_byte_counter
+                        + TryInto::<i32>::try_into(new_len - old_len)
+                            .map_err(|_| ProgramError::InvalidRealloc)?;
+
+                    // Check to see if we've exceeded max realloc across all invocations
+                    if new_counter > MAX_PERMITTED_DATA_INCREASE as i32
+                    {
+                        return Err(ProgramError::InvalidRealloc);
+                    }
+
+                    // Set new length and new counter in the serialized data after all validation
+                    (*self.inner).data_len = new_len;
+                    (*self.inner).realloc_byte_counter = new_counter;
+
+                    // Zero init if specified
+                    if zero_init {
+                        let len_increase = new_len - old_len;
+                        let new_data_slice =
+                            core::slice::from_raw_parts_mut(
+                                data.as_mut_ptr().add(old_len),
+                                len_increase,
+                            );
+                        sol_memset(new_data_slice, 0, len_increase);
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Private: gets the memory addr of the account data
