@@ -1181,6 +1181,13 @@ impl NoStdAccountInfo {
         Ok(())
     }
 
+    pub fn reassign(&self, new_owner: &Pubkey) {
+        // Set the non-mut owner field
+        unsafe {
+            (*self.inner).owner = *new_owner;
+        }
+    }
+
     /// Private: gets the memory addr of the account data
     fn data_ptr(&self) -> *mut u8 {
         unsafe {
