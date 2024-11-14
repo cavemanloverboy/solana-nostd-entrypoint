@@ -6,4 +6,6 @@ resolver = "2"
 [workspace.dependencies]
 solana-nostd-entrypoint = { path = "./solana-nostd-entrypoint" }
 peregrine-alloc = { path = "./peregrine-alloc" }
-solana-program = "1.18"
+solana-program = "2"
+solana-program-test = "2"
+solana-sdk = "2"
