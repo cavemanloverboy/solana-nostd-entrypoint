@@ -576,6 +576,46 @@ pub struct AccountMetaC {
     pub is_signer: bool,
 }
 
+impl AccountMetaC {
+    /// Uses signer = false. for signers use `readonly_signer`
+    #[inline(always)]
+    pub fn readonly(pubkey: *const Pubkey) -> AccountMetaC {
+        AccountMetaC {
+            pubkey,
+            is_writable: false,
+            is_signer: false,
+        }
+    }
+
+    /// Uses signer = false. for signers use `writable_signer`
+    #[inline(always)]
+    pub fn writable(pubkey: *const Pubkey) -> AccountMetaC {
+        AccountMetaC {
+            pubkey,
+            is_writable: true,
+            is_signer: true,
+        }
+    }
+
+    #[inline(always)]
+    pub fn readonly_signer(pubkey: *const Pubkey) -> AccountMetaC {
+        AccountMetaC {
+            pubkey,
+            is_writable: false,
+            is_signer: true,
+        }
+    }
+
+    #[inline(always)]
+    pub fn writable_signer(pubkey: *const Pubkey) -> AccountMetaC {
+        AccountMetaC {
+            pubkey,
+            is_writable: true,
+            is_signer: true,
+        }
+    }
+}
+
 /// An AccountInfo as expected by sol_invoke_signed_c
 #[repr(C)]
 #[derive(Clone)]
