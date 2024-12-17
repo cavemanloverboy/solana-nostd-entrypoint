@@ -593,7 +593,7 @@ impl AccountMetaC {
         AccountMetaC {
             pubkey,
             is_writable: true,
-            is_signer: true,
+            is_signer: false,
         }
     }
 
