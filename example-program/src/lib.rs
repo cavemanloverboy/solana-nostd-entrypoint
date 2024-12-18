@@ -10,7 +10,7 @@ use solana_nostd_entrypoint::{
 
 entrypoint_nostd!(process_instruction, 32);
 
-pub const ID: Pubkey = solana_program::pubkey!(
+solana_program::declare_id!(
     "EWUt9PAjn26zCUALRRt56Gutaj52Bpb8ifbf7GZX3h1k"
 );
 

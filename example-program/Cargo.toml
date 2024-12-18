@@ -20,6 +20,6 @@ solana-nostd-entrypoint = { workspace = true }
 # solana-program-error = { git = "https://github.com/anza-xyz/agave.git" }
 
 [dev-dependencies]
-solana-program-test = "1.18.1"
-solana-sdk = "1.18.1"
+solana-program-test = { workspace = true }
+solana-sdk = { workspace = true }
 tokio = { version = "1.35.1", features = ["full"] }
