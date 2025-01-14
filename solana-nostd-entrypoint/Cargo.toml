@@ -14,4 +14,4 @@ repository = "https://github.com/cavemanloverboy/solana-nostd-entrypoint"
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
-solana-program = "1.18"
+solana-program = { workspace = true }
