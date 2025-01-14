@@ -14,12 +14,15 @@ repository = "https://github.com/cavemanloverboy/solana-nostd-entrypoint"
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
-solana-program = { workspace = true }
+solana-msg = { workspace = true }
 solana-nostd-entrypoint = { workspace = true }
-# solana-pubkey = { git = "https://github.com/anza-xyz/agave.git" }
-# solana-program-error = { git = "https://github.com/anza-xyz/agave.git" }
+solana-program = { workspace = true }
+solana-program-entrypoint = { workspace = true }
+solana-program-error = { workspace = true }
+solana-pubkey = { workspace = true }
 
 [dev-dependencies]
+solana-instruction = { workspace = true }
 solana-program-test = { workspace = true }
 solana-sdk = { workspace = true }
 tokio = { version = "1.35.1", features = ["full"] }

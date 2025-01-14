@@ -9,13 +9,13 @@ use core::{
     slice::from_raw_parts,
 };
 
-use solana_program::{
-    entrypoint::{
+use {
+    solana_program_entrypoint::{
         BPF_ALIGN_OF_U128, MAX_PERMITTED_DATA_INCREASE, NON_DUP_MARKER,
     },
-    program_error::ProgramError,
-    program_memory::sol_memset,
-    pubkey::Pubkey,
+    solana_program_error::ProgramError,
+    solana_program_memory::sol_memset,
+    solana_pubkey::Pubkey,
 };
 
 #[macro_export]
@@ -75,7 +75,7 @@ macro_rules! entrypoint_nostd_no_duplicates {
                 )
             else {
                 // TODO: better error
-                solana_program::log::sol_log(
+                $crate::__private::sol_log(
                     "a duplicate account was found",
                 );
                 return u64::MAX;
@@ -147,7 +147,7 @@ macro_rules! entrypoint_nostd_no_duplicates_no_program {
                 $crate::deserialize_nostd_no_dup_no_program::<$accounts>(input, &mut accounts)
             else {
                 // TODO: better error
-                solana_program::log::sol_log("a duplicate account was found");
+                $crate::__private::sol_log("a duplicate account was found");
                 return u64::MAX;
             };
 

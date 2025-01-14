@@ -5,17 +5,22 @@ The entrypoint function in `solana_program` is grossly inefficient. With an empt
 This crate also includes a simple reference program that invokes another program. See `example_program/lib.rs`:
 
 ```rust
-use solana_nostd_entrypoint::{
-    basic_panic_impl, entrypoint_nostd, noalloc_allocator,
-    solana_program::{
-        entrypoint::ProgramResult, log, program_error::ProgramError, pubkey::Pubkey, system_program,
+use {
+    solana_msg::sol_log,
+    solana_nostd_entrypoint::{
+        basic_panic_impl, entrypoint_nostd, noalloc_allocator,
+        InstructionC, NoStdAccountInfo,
     },
-    InstructionC, NoStdAccountInfo,
+    solana_program_error::{ProgramError, ProgramResult},
+    solana_pubkey::Pubkey,
 };
+
+const SYS_PROGRAM_ID: Pubkey =
+    solana_pubkey::pubkey!("11111111111111111111111111111111");
 
 entrypoint_nostd!(process_instruction, 32);
 
-pub const ID: Pubkey = solana_nostd_entrypoint::solana_program::pubkey!(
+pub const ID: Pubkey = solana_pubkey::pubkey!(
     "EWUt9PAjn26zCUALRRt56Gutaj52Bpb8ifbf7GZX3h1k"
 );
 
@@ -44,7 +49,7 @@ pub fn process_instruction(
 
     // Build instruction expected by sol_invoke_signed_c
     let instruction = InstructionC {
-        program_id: &system_program::ID,
+        program_id: &SYS_PROGRAM_ID,
         accounts: instruction_accounts.as_ptr(),
         accounts_len: instruction_accounts.len() as u64,
         data: instruction_data.as_ptr(),
