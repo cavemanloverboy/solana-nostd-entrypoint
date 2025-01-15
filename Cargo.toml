@@ -5,7 +5,6 @@ resolver = "2"
 
 [workspace.dependencies]
 solana-nostd-entrypoint = { path = "./solana-nostd-entrypoint" }
-peregrine-alloc = { path = "./peregrine-alloc" }
 solana-define-syscall = "2.1"
 solana-instruction = "2.1"
 solana-msg = "2.1"
