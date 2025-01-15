@@ -1,10 +1,11 @@
 #![no_std]
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/README.md"))]
 
-pub use solana_program;
-
 pub mod entrypoint_nostd;
 pub use entrypoint_nostd::*;
+pub mod __private {
+    pub use solana_msg::sol_log;
+}
 
 #[macro_export]
 macro_rules! noalloc_allocator {
@@ -42,7 +43,7 @@ macro_rules! basic_panic_impl {
         #[cfg(target_os = "solana")]
         #[no_mangle]
         fn custom_panic(_info: &core::panic::PanicInfo<'_>) {
-            $crate::solana_program::log::sol_log("panicked!");
+            $crate::__private::sol_log("panicked!");
         }
     };
 }

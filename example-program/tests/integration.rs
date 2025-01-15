@@ -1,6 +1,9 @@
-use solana_program::instruction::{AccountMeta, Instruction};
+use solana_instruction::{AccountMeta, Instruction};
 use solana_program_test::ProgramTest;
-use solana_sdk::{signature::Keypair, signer::Signer, transaction::Transaction};
+use solana_pubkey::Pubkey;
+use solana_sdk::{
+    signature::Keypair, signer::Signer, transaction::Transaction,
+};
 
 #[tokio::test(flavor = "current_thread")]
 async fn no_std_integration() {
@@ -10,13 +13,13 @@ async fn no_std_integration() {
         None,
     );
     program_test.prefer_bpf(true);
-    let (mut banks, payer, recent_blockhash) = program_test.start().await;
+    let (banks, payer, recent_blockhash) = program_test.start().await;
 
     let other_user = Keypair::new();
     let accounts = [
         AccountMeta::new(payer.pubkey(), true),
         AccountMeta::new(other_user.pubkey(), false),
-        AccountMeta::new_readonly(solana_program::system_program::ID, false),
+        AccountMeta::new_readonly(Pubkey::default(), false),
     ];
     let instruction = Instruction {
         program_id: solana_nostd_example_program::ID,
@@ -30,5 +33,8 @@ async fn no_std_integration() {
         recent_blockhash,
     );
 
-    banks.process_transaction(transaction).await.unwrap();
+    banks
+        .process_transaction(transaction)
+        .await
+        .unwrap();
 }

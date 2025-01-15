@@ -55,7 +55,7 @@ pub mod entrypoint {
         // Invoke system program
         #[cfg(target_os = "solana")]
         unsafe {
-            solana_program::syscalls::sol_invoke_signed_c(
+            solana_program::syscalls::definitions::sol_invoke_signed_c(
                 &instruction as *const InstructionC as *const u8,
                 infos.as_ptr() as *const u8,
                 infos.len() as u64,

@@ -1,16 +1,20 @@
 #![allow(unexpected_cfgs)]
-use solana_nostd_entrypoint::{
-    basic_panic_impl, entrypoint_nostd, noalloc_allocator,
-    solana_program::{
-        entrypoint::ProgramResult, log, program_error::ProgramError,
-        pubkey::Pubkey, system_program,
+use {
+    solana_msg::sol_log,
+    solana_nostd_entrypoint::{
+        basic_panic_impl, entrypoint_nostd, noalloc_allocator,
+        InstructionC, NoStdAccountInfo,
     },
-    InstructionC, NoStdAccountInfo,
+    solana_program_error::{ProgramError, ProgramResult},
+    solana_pubkey::Pubkey,
 };
+
+const SYS_PROGRAM_ID: Pubkey =
+    solana_pubkey::pubkey!("11111111111111111111111111111111");
 
 entrypoint_nostd!(process_instruction, 32);
 
-solana_program::declare_id!(
+solana_pubkey::declare_id!(
     "EWUt9PAjn26zCUALRRt56Gutaj52Bpb8ifbf7GZX3h1k"
 );
 
@@ -22,14 +26,15 @@ pub fn process_instruction(
     accounts: &[NoStdAccountInfo],
     _data: &[u8],
 ) -> ProgramResult {
-    log::sol_log("nostd");
+    sol_log("nostd");
 
     // Unpack accounts
     let [user, config, _rem @ ..] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    // Transfer has discriminant 2_u32 (little endian), followed u64 lamport amount
+    // Transfer has discriminant 2_u32 (little endian), followed u64
+    // lamport amount
     let mut instruction_data = [0; 12];
     instruction_data[0] = 2;
     instruction_data[4..12]
@@ -40,7 +45,7 @@ pub fn process_instruction(
 
     // Build instruction expected by sol_invoke_signed_c
     let instruction = InstructionC {
-        program_id: &system_program::ID,
+        program_id: &SYS_PROGRAM_ID,
         accounts: instruction_accounts.as_ptr(),
         accounts_len: instruction_accounts.len() as u64,
         data: instruction_data.as_ptr(),
