@@ -1,5 +1,5 @@
 [workspace]
-members = ["solana-nostd-entrypoint", "example-program"]
+members = ["solana-nostd-entrypoint", "example-program", "system", "token"]
 resolver = "2"
 
 
