@@ -767,14 +767,14 @@ impl<'a, T: ?Sized> Ref<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized> core::ops::Deref for Ref<'a, T> {
+impl<T: ?Sized> core::ops::Deref for Ref<'_, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         unsafe { self.value.as_ref() }
     }
 }
 
-impl<'a, T: ?Sized> Drop for Ref<'a, T> {
+impl<T: ?Sized> Drop for Ref<'_, T> {
     // We just need to decrement the immutable borrow count
     // maybe super minor todo: we can save the is_lamport check by using
     // a separate ref type
@@ -787,7 +787,7 @@ impl<'a, T: ?Sized> Drop for Ref<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized + core::fmt::Debug> core::fmt::Debug for Ref<'a, T> {
+impl<T: ?Sized + core::fmt::Debug> core::fmt::Debug for Ref<'_, T> {
     fn fmt(
         &self,
         f: &mut core::fmt::Formatter<'_>,
@@ -847,19 +847,19 @@ impl<'a, T: ?Sized> RefMut<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized> core::ops::Deref for RefMut<'a, T> {
+impl<T: ?Sized> core::ops::Deref for RefMut<'_, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         unsafe { self.value.as_ref() }
     }
 }
-impl<'a, T: ?Sized> core::ops::DerefMut for RefMut<'a, T> {
+impl<T: ?Sized> core::ops::DerefMut for RefMut<'_, T> {
     fn deref_mut(&mut self) -> &mut <Self as core::ops::Deref>::Target {
         unsafe { self.value.as_mut() }
     }
 }
 
-impl<'a, T: ?Sized> Drop for RefMut<'a, T> {
+impl<T: ?Sized> Drop for RefMut<'_, T> {
     // We need to unset the mut borrow flag
     // maybe super minor todo: we can save the is_lamport check by using
     // a separate type
@@ -872,8 +872,8 @@ impl<'a, T: ?Sized> Drop for RefMut<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized + core::fmt::Debug> core::fmt::Debug
-    for RefMut<'a, T>
+impl<T: ?Sized + core::fmt::Debug> core::fmt::Debug
+    for RefMut<'_, T>
 {
     fn fmt(
         &self,
