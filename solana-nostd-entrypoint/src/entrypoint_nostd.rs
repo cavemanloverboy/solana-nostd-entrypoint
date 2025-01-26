@@ -872,9 +872,7 @@ impl<T: ?Sized> Drop for RefMut<'_, T> {
     }
 }
 
-impl<T: ?Sized + core::fmt::Debug> core::fmt::Debug
-    for RefMut<'_, T>
-{
+impl<T: ?Sized + core::fmt::Debug> core::fmt::Debug for RefMut<'_, T> {
     fn fmt(
         &self,
         f: &mut core::fmt::Formatter<'_>,
