@@ -186,8 +186,10 @@ pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
             let dup_info = *(input.add(offset) as *const u8);
             if dup_info == NON_DUP_MARKER {
                 // MAGNETAR FIELDS: safety depends on alignment, size
-                // 1) we will always be 8 byte aligned due to align_offset
-                // 2) solana vm serialization format is consistent so size is ok
+                // 1) we will always be 8 byte aligned due to
+                //    align_offset
+                // 2) solana vm serialization format is consistent so
+                //    size is ok
                 let account_info: *mut NoStdAccountInfoInner =
                     input.add(offset) as *mut _;
 
@@ -198,7 +200,8 @@ pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
                     .align_offset(BPF_ALIGN_OF_U128);
                 offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
 
-                // MAGNETAR FIELDS: reset borrow state right before pushing
+                // MAGNETAR FIELDS: reset borrow state right before
+                // pushing
                 (*account_info).borrow_state = 0b_0000_0000;
 
                 accounts[i].write(NoStdAccountInfo {
@@ -215,10 +218,12 @@ pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
             }
         }
 
-        // Skip any remaining accounts (if any) that we don't have space to include.
+        // Skip any remaining accounts (if any) that we don't have space
+        // to include.
         //
-        // This duplicates the logic of parsing accounts but avoids the extra CU
-        // consumption of having to check the array bounds at each iteration.
+        // This duplicates the logic of parsing accounts but avoids the
+        // extra CU consumption of having to check the array
+        // bounds at each iteration.
         for _ in processed..num_accounts {
             if *(input.add(offset) as *const u8) == NON_DUP_MARKER {
                 let account_info: *mut NoStdAccountInfoInner =
@@ -228,7 +233,8 @@ pub unsafe fn deserialize_nostd<'a, const MAX_ACCOUNTS: usize>(
                 offset += MAX_PERMITTED_DATA_INCREASE;
                 offset += (offset as *const u8)
                     .align_offset(BPF_ALIGN_OF_U128);
-                offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
+                offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore
+                                            // rent epoch
             } else {
                 offset += 8;
             }
@@ -282,8 +288,10 @@ pub unsafe fn deserialize_nostd_no_dup<
             let dup_info = *(input.add(offset) as *const u8);
             if dup_info == NON_DUP_MARKER {
                 // MAGNETAR FIELDS: safety depends on alignment, size
-                // 1) we will always be 8 byte aligned due to align_offset
-                // 2) solana vm serialization format is consistent so size is ok
+                // 1) we will always be 8 byte aligned due to
+                //    align_offset
+                // 2) solana vm serialization format is consistent so
+                //    size is ok
                 let account_info: *mut NoStdAccountInfoInner =
                     input.add(offset) as *mut _;
 
@@ -294,7 +302,8 @@ pub unsafe fn deserialize_nostd_no_dup<
                     .align_offset(BPF_ALIGN_OF_U128);
                 offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
 
-                // MAGNETAR FIELDS: reset borrow state right before pushing
+                // MAGNETAR FIELDS: reset borrow state right before
+                // pushing
                 (*account_info).borrow_state = 0b_0000_0000;
 
                 accounts[i].write(NoStdAccountInfo {
@@ -305,10 +314,12 @@ pub unsafe fn deserialize_nostd_no_dup<
             }
         }
 
-        // Skip any remaining accounts (if any) that we don't have space to include.
+        // Skip any remaining accounts (if any) that we don't have space
+        // to include.
         //
-        // This duplicates the logic of parsing accounts but avoids the extra CU
-        // consumption of having to check the array bounds at each iteration.
+        // This duplicates the logic of parsing accounts but avoids the
+        // extra CU consumption of having to check the array
+        // bounds at each iteration.
         for _ in processed..num_accounts {
             if *(input.add(offset) as *const u8) == NON_DUP_MARKER {
                 let account_info: *mut NoStdAccountInfoInner =
@@ -318,7 +329,8 @@ pub unsafe fn deserialize_nostd_no_dup<
                 offset += MAX_PERMITTED_DATA_INCREASE;
                 offset += (offset as *const u8)
                     .align_offset(BPF_ALIGN_OF_U128);
-                offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
+                offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore
+                                            // rent epoch
             } else {
                 offset += 8;
             }
@@ -371,8 +383,10 @@ pub unsafe fn deserialize_nostd_no_program<
             let dup_info = *(input.add(offset) as *const u8);
             if dup_info == NON_DUP_MARKER {
                 // MAGNETAR FIELDS: safety depends on alignment, size
-                // 1) we will always be 8 byte aligned due to align_offset
-                // 2) solana vm serialization format is consistent so size is ok
+                // 1) we will always be 8 byte aligned due to
+                //    align_offset
+                // 2) solana vm serialization format is consistent so
+                //    size is ok
                 let account_info: *mut NoStdAccountInfoInner =
                     input.add(offset) as *mut _;
 
@@ -383,7 +397,8 @@ pub unsafe fn deserialize_nostd_no_program<
                     .align_offset(BPF_ALIGN_OF_U128);
                 offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
 
-                // MAGNETAR FIELDS: reset borrow state right before pushing
+                // MAGNETAR FIELDS: reset borrow state right before
+                // pushing
                 (*account_info).borrow_state = 0b_0000_0000;
 
                 accounts[i].write(NoStdAccountInfo {
@@ -400,10 +415,12 @@ pub unsafe fn deserialize_nostd_no_program<
             }
         }
 
-        // Skip any remaining accounts (if any) that we don't have space to include.
+        // Skip any remaining accounts (if any) that we don't have space
+        // to include.
         //
-        // This duplicates the logic of parsing accounts but avoids the extra CU
-        // consumption of having to check the array bounds at each iteration.
+        // This duplicates the logic of parsing accounts but avoids the
+        // extra CU consumption of having to check the array
+        // bounds at each iteration.
         for _ in processed..num_accounts {
             if *(input.add(offset) as *const u8) == NON_DUP_MARKER {
                 let account_info: *mut NoStdAccountInfoInner =
@@ -413,7 +430,8 @@ pub unsafe fn deserialize_nostd_no_program<
                 offset += MAX_PERMITTED_DATA_INCREASE;
                 offset += (offset as *const u8)
                     .align_offset(BPF_ALIGN_OF_U128);
-                offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
+                offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore
+                                            // rent epoch
             } else {
                 offset += 8;
             }
@@ -463,8 +481,10 @@ pub unsafe fn deserialize_nostd_no_dup_no_program<
             let dup_info = *(input.add(offset) as *const u8);
             if dup_info == NON_DUP_MARKER {
                 // MAGNETAR FIELDS: safety depends on alignment, size
-                // 1) we will always be 8 byte aligned due to align_offset
-                // 2) solana vm serialization format is consistent so size is ok
+                // 1) we will always be 8 byte aligned due to
+                //    align_offset
+                // 2) solana vm serialization format is consistent so
+                //    size is ok
                 let account_info: *mut NoStdAccountInfoInner =
                     input.add(offset) as *mut _;
 
@@ -475,7 +495,8 @@ pub unsafe fn deserialize_nostd_no_dup_no_program<
                     .align_offset(BPF_ALIGN_OF_U128);
                 offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
 
-                // MAGNETAR FIELDS: reset borrow state right before pushing
+                // MAGNETAR FIELDS: reset borrow state right before
+                // pushing
                 (*account_info).borrow_state = 0b_0000_0000;
 
                 accounts[i].write(NoStdAccountInfo {
@@ -486,10 +507,12 @@ pub unsafe fn deserialize_nostd_no_dup_no_program<
             }
         }
 
-        // Skip any remaining accounts (if any) that we don't have space to include.
+        // Skip any remaining accounts (if any) that we don't have space
+        // to include.
         //
-        // This duplicates the logic of parsing accounts but avoids the extra CU
-        // consumption of having to check the array bounds at each iteration.
+        // This duplicates the logic of parsing accounts but avoids the
+        // extra CU consumption of having to check the array
+        // bounds at each iteration.
         for _ in processed..num_accounts {
             if *(input.add(offset) as *const u8) == NON_DUP_MARKER {
                 let account_info: *mut NoStdAccountInfoInner =
@@ -499,7 +522,8 @@ pub unsafe fn deserialize_nostd_no_dup_no_program<
                 offset += MAX_PERMITTED_DATA_INCREASE;
                 offset += (offset as *const u8)
                     .align_offset(BPF_ALIGN_OF_U128);
-                offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore rent epoch
+                offset += size_of::<u64>(); // MAGNETAR FIELDS: ignore
+                                            // rent epoch
             } else {
                 offset += 8;
             }
@@ -532,14 +556,16 @@ pub struct NoStdAccountInfo {
 #[derive(Clone, Copy, Default)]
 #[repr(C)]
 pub struct NoStdAccountInfoInner {
-    /// 0) We reuse the duplicate flag for this. We set it to 0b0000_0000.
+    /// 0) We reuse the duplicate flag for this. We set it to
+    ///    0b0000_0000.
     /// 1) We use the first four bits to track state of lamport borrow
     /// 2) We use the second four bits to track state of data borrow
     ///
-    /// 4 bit state: [1 bit mutable borrow flag | u3 immmutable borrow flag]
-    /// This gives us up to 7 immutable borrows. Note that does not mean 7
-    /// duplicate account infos, but rather 7 calls to borrow lamports or
-    /// borrow data across all duplicate account infos.
+    /// 4 bit state: [1 bit mutable borrow flag | u3 immmutable borrow
+    /// flag] This gives us up to 7 immutable borrows. Note that
+    /// does not mean 7 duplicate account infos, but rather 7 calls
+    /// to borrow lamports or borrow data across all duplicate
+    /// account infos.
     borrow_state: u8,
 
     /// Was the transaction signed by this account's public key?
@@ -548,7 +574,8 @@ pub struct NoStdAccountInfoInner {
     /// Is the account writable?
     is_writable: u8,
 
-    /// This account's data contains a loaded program (and is now read-only)
+    /// This account's data contains a loaded program (and is now
+    /// read-only)
     executable: u8,
 
     realloc_byte_counter: i32,
@@ -644,7 +671,8 @@ pub struct AccountInfoC {
     // Is the account writable?
     pub is_writable: bool,
 
-    // This account's data contains a loaded program (and is now read-only)
+    // This account's data contains a loaded program (and is now
+    // read-only)
     pub executable: bool,
 }
 
@@ -660,7 +688,8 @@ impl AccountInfoC {
     }
 
     /// A CPI utility function.
-    /// Intended for PDAs that didn't sign transaction but must sign for cpi.
+    /// Intended for PDAs that didn't sign transaction but must sign for
+    /// cpi.
     #[inline(always)]
     pub fn to_meta_c_signer(&self) -> AccountMetaC {
         AccountMetaC {
@@ -738,16 +767,17 @@ impl<'a, T: ?Sized> Ref<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized> core::ops::Deref for Ref<'a, T> {
+impl<T: ?Sized> core::ops::Deref for Ref<'_, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         unsafe { self.value.as_ref() }
     }
 }
 
-impl<'a, T: ?Sized> Drop for Ref<'a, T> {
+impl<T: ?Sized> Drop for Ref<'_, T> {
     // We just need to decrement the immutable borrow count
-    // maybe super minor todo: we can save the is_lamport check by using a separate ref type
+    // maybe super minor todo: we can save the is_lamport check by using
+    // a separate ref type
     fn drop(&mut self) {
         if self.is_lamport {
             unsafe { *self.state.as_mut() -= 1 << 4 };
@@ -757,7 +787,7 @@ impl<'a, T: ?Sized> Drop for Ref<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized + core::fmt::Debug> core::fmt::Debug for Ref<'a, T> {
+impl<T: ?Sized + core::fmt::Debug> core::fmt::Debug for Ref<'_, T> {
     fn fmt(
         &self,
         f: &mut core::fmt::Formatter<'_>,
@@ -769,7 +799,8 @@ pub struct RefMut<'a, T: ?Sized> {
     value: NonNull<T>,
     state: NonNull<u8>,
     is_lamport: bool,
-    // `NonNull` is covariant over `T`, so we need to reintroduce invariance.
+    // `NonNull` is covariant over `T`, so we need to reintroduce
+    // invariance.
     marker: PhantomData<&'a mut T>,
 }
 
@@ -816,21 +847,22 @@ impl<'a, T: ?Sized> RefMut<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized> core::ops::Deref for RefMut<'a, T> {
+impl<T: ?Sized> core::ops::Deref for RefMut<'_, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         unsafe { self.value.as_ref() }
     }
 }
-impl<'a, T: ?Sized> core::ops::DerefMut for RefMut<'a, T> {
+impl<T: ?Sized> core::ops::DerefMut for RefMut<'_, T> {
     fn deref_mut(&mut self) -> &mut <Self as core::ops::Deref>::Target {
         unsafe { self.value.as_mut() }
     }
 }
 
-impl<'a, T: ?Sized> Drop for RefMut<'a, T> {
+impl<T: ?Sized> Drop for RefMut<'_, T> {
     // We need to unset the mut borrow flag
-    // maybe super minor todo: we can save the is_lamport check by using a separate type
+    // maybe super minor todo: we can save the is_lamport check by using
+    // a separate type
     fn drop(&mut self) {
         if self.is_lamport {
             unsafe { *self.state.as_mut() &= 0b_0111_1111 };
@@ -840,9 +872,7 @@ impl<'a, T: ?Sized> Drop for RefMut<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized + core::fmt::Debug> core::fmt::Debug
-    for RefMut<'a, T>
-{
+impl<T: ?Sized + core::fmt::Debug> core::fmt::Debug for RefMut<'_, T> {
     fn fmt(
         &self,
         f: &mut core::fmt::Formatter<'_>,
@@ -871,7 +901,8 @@ pub struct RcRefCellInner<'a, T> {
 }
 
 impl<'a, T> RcRefCellInner<'a, T> {
-    #[allow(unused)] // used for sol_invoke_signed_rust, which is commented out for now...
+    #[allow(unused)] // used for sol_invoke_signed_rust, which is commented out for
+                     // now...
     fn new(value: T) -> RcRefCellInner<'a, T> {
         RcRefCellInner {
             strong: 2,
@@ -889,7 +920,8 @@ impl<'a, T> RcRefCellInner<'a, T> {
     /// used. There can be no safe abstraction that guarantees users
     /// do this because we cannot make Rc inherit the borrowed
     /// lifetime.
-    #[allow(unused)] // used for sol_invoke_signed_rust, which is commented out for now...
+    #[allow(unused)] // used for sol_invoke_signed_rust, which is commented out for
+                     // now...
     unsafe fn as_rcrc(&self) -> Rc<RefCell<T>> {
         // Rc::from_raw expects pointer to T
         unsafe { Rc::from_raw(&self.refcell as *const RefCell<T>) }
@@ -928,7 +960,8 @@ impl NoStdAccountInfo {
 
     /// CPI utility function.
     ///
-    /// Intended for pdas that did not sign transaction but need to sign for cpi.
+    /// Intended for pdas that did not sign transaction but need to sign
+    /// for cpi.
     pub fn to_meta_c_signer(&self) -> AccountMetaC {
         AccountMetaC {
             pubkey: offset(self.inner, 8),
@@ -937,19 +970,23 @@ impl NoStdAccountInfo {
         }
     }
 
-    // These two functions can be used to cpi via sol_invoke_signed_rust, but it is very easy to
-    // mess this up. Please just use sol_invoke_signed_c.
+    // These two functions can be used to cpi via
+    // sol_invoke_signed_rust, but it is very easy to mess this up.
+    // Please just use sol_invoke_signed_c.
     //
     // pub unsafe fn unchecked_info_prep<'a>(
     //     &'a self,
-    // ) -> (RcRefCellInner<&'a mut u64>, RcRefCellInner<&'a mut [u8]>) {
-    //     let lamports_inner = RcRefCellInner::new(self.unchecked_borrow_mut_lamports());
-    //     let data_inner = RcRefCellInner::new(self.unchecked_borrow_mut_data());
+    // ) -> (RcRefCellInner<&'a mut u64>, RcRefCellInner<&'a mut [u8]>)
+    // {     let lamports_inner =
+    // RcRefCellInner::new(self.unchecked_borrow_mut_lamports());
+    //     let data_inner =
+    // RcRefCellInner::new(self.unchecked_borrow_mut_data());
     //     (lamports_inner, data_inner)
     // }
     // pub unsafe fn info_with<'a>(
     //     &'a self,
-    //     lamports_data: &'a (RcRefCellInner<&'a mut u64>, RcRefCellInner<&'a mut [u8]>),
+    //     lamports_data: &'a (RcRefCellInner<&'a mut u64>,
+    // RcRefCellInner<&'a mut [u8]>),
     // ) -> solana_program::account_info::AccountInfo<'a> {
     //     let (lamports, data) = lamports_data;
     //     solana_program::account_info::AccountInfo {
@@ -990,18 +1027,21 @@ impl NoStdAccountInfo {
     }
 
     /// # Safety
-    /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
+    /// This does not check or modify the 4-bit refcell. Useful when
+    /// instruction has verified non-duplicate accounts.
     pub unsafe fn unchecked_borrow_lamports(&self) -> &u64 {
         &(*self.inner).lamports
     }
     /// # Safety
-    /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
+    /// This does not check or modify the 4-bit refcell. Useful when
+    /// instruction has verified non-duplicate accounts.
     #[allow(clippy::mut_from_ref)]
     pub unsafe fn unchecked_borrow_mut_lamports(&self) -> &mut u64 {
         &mut (*self.inner).lamports
     }
     /// # Safety
-    /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
+    /// This does not check or modify the 4-bit refcell. Useful when
+    /// instruction has verified non-duplicate accounts.
     pub unsafe fn unchecked_borrow_data(&self) -> &[u8] {
         core::slice::from_raw_parts(
             self.data_ptr(),
@@ -1009,7 +1049,8 @@ impl NoStdAccountInfo {
         )
     }
     /// # Safety
-    /// This does not check or modify the 4-bit refcell. Useful when instruction has verified non-duplicate accounts.
+    /// This does not check or modify the 4-bit refcell. Useful when
+    /// instruction has verified non-duplicate accounts.
     #[allow(clippy::mut_from_ref)]
     pub unsafe fn unchecked_borrow_mut_data(&self) -> &mut [u8] {
         core::slice::from_raw_parts_mut(
@@ -1018,8 +1059,9 @@ impl NoStdAccountInfo {
         )
     }
 
-    /// Tries to get a read only reference to the lamport field, failing if the field is already mutable borrowed or
-    /// if 7 borrows already exist.
+    /// Tries to get a read only reference to the lamport field, failing
+    /// if the field is already mutable borrowed or if 7 borrows
+    /// already exist.
     pub fn try_borrow_lamports(
         &self,
     ) -> Result<Ref<u64>, ProgramError> {
@@ -1049,13 +1091,15 @@ impl NoStdAccountInfo {
         })
     }
 
-    /// Tries to get a read only reference to the lamport field, failing if the field is already borrowed in any form.
+    /// Tries to get a read only reference to the lamport field, failing
+    /// if the field is already borrowed in any form.
     pub fn try_borrow_mut_lamports(
         &self,
     ) -> Result<RefMut<u64>, ProgramError> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
-        // Check if any borrow (mutable or immutable) is already taken for lamports
+        // Check if any borrow (mutable or immutable) is already taken
+        // for lamports
         if *borrow_state & 0b_1111_0000 != 0 {
             return Err(ProgramError::AccountBorrowFailed);
         }
@@ -1076,17 +1120,20 @@ impl NoStdAccountInfo {
         })
     }
 
-    /// Tries to get a read only reference to the data field, failing if the field is already mutable borrowed or
-    /// if 7 borrows already exist.
+    /// Tries to get a read only reference to the data field, failing if
+    /// the field is already mutable borrowed or if 7 borrows
+    /// already exist.
     pub fn try_borrow_data(&self) -> Result<Ref<[u8]>, ProgramError> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
-        // Check if mutable data borrow is already taken (most significant bit of the data_borrow_state)
+        // Check if mutable data borrow is already taken (most
+        // significant bit of the data_borrow_state)
         if *borrow_state & 0b_0000_1000 != 0 {
             return Err(ProgramError::AccountBorrowFailed);
         }
 
-        // Check if we have reached the max immutable data borrow count (7)
+        // Check if we have reached the max immutable data borrow count
+        // (7)
         if *borrow_state & 0b0111 == 0b0111 {
             return Err(ProgramError::AccountBorrowFailed);
         }
@@ -1110,13 +1157,15 @@ impl NoStdAccountInfo {
         })
     }
 
-    /// Tries to get a read only reference to the data field, failing if the field is already borrowed in any form.
+    /// Tries to get a read only reference to the data field, failing if
+    /// the field is already borrowed in any form.
     pub fn try_borrow_mut_data(
         &self,
     ) -> Result<RefMut<[u8]>, ProgramError> {
         let borrow_state = unsafe { &mut (*self.inner).borrow_state };
 
-        // Check if any borrow (mutable or immutable) is already taken for data
+        // Check if any borrow (mutable or immutable) is already taken
+        // for data
         if *borrow_state & 0b_0000_1111 != 0 {
             return Err(ProgramError::AccountBorrowFailed);
         }
@@ -1142,24 +1191,27 @@ impl NoStdAccountInfo {
         })
     }
 
-    /// Realloc the account's data and optionally zero-initialize the new
-    /// memory.
+    /// Realloc the account's data and optionally zero-initialize the
+    /// new memory.
     ///
-    /// Note:  Account data can be increased within a single call by up to
-    /// `solana_program::entrypoint::MAX_PERMITTED_DATA_INCREASE` bytes.
+    /// Note:  Account data can be increased within a single call by up
+    /// to `solana_program::entrypoint::MAX_PERMITTED_DATA_INCREASE`
+    /// bytes.
     ///
-    /// Note: Memory used to grow is already zero-initialized upon program
-    /// entrypoint and re-zeroing it wastes compute units.  If within the same
-    /// call a program reallocs from larger to smaller and back to larger again
-    /// the new space could contain stale data.  Pass `true` for `zero_init` in
-    /// this case, otherwise compute units will be wasted re-zero-initializing.
+    /// Note: Memory used to grow is already zero-initialized upon
+    /// program entrypoint and re-zeroing it wastes compute units.
+    /// If within the same call a program reallocs from larger to
+    /// smaller and back to larger again the new space could contain
+    /// stale data.  Pass `true` for `zero_init` in this case,
+    /// otherwise compute units will be wasted re-zero-initializing.
     ///
     /// # Safety
     ///
-    /// This method makes assumptions about the layout and location of memory
-    /// referenced by `AccountInfo` fields. It should only be called for
-    /// instances of `AccountInfo` that were created by the runtime and received
-    /// in the `process_instruction` entrypoint of a program.
+    /// This method makes assumptions about the layout and location of
+    /// memory referenced by `AccountInfo` fields. It should only be
+    /// called for instances of `AccountInfo` that were created by
+    /// the runtime and received in the `process_instruction`
+    /// entrypoint of a program.
     pub fn realloc(
         &self,
         new_len: usize,
@@ -1174,7 +1226,8 @@ impl NoStdAccountInfo {
             core::cmp::Ordering::Equal => return Ok(()),
 
             // No checks
-            // Old len fits in an i32, and new_len is smaller so new len fits in i32.
+            // Old len fits in an i32, and new_len is smaller so new len
+            // fits in i32.
             core::cmp::Ordering::Less => {
                 unsafe {
                     (*self.inner).realloc_byte_counter -=
@@ -1185,7 +1238,8 @@ impl NoStdAccountInfo {
                 };
             }
 
-            // Need to check that the diff fits in an i32 and that max realloc has not been reached
+            // Need to check that the diff fits in an i32 and that max
+            // realloc has not been reached
             core::cmp::Ordering::Greater => {
                 unsafe {
                     // Check diff
@@ -1194,13 +1248,15 @@ impl NoStdAccountInfo {
                         + TryInto::<i32>::try_into(new_len - old_len)
                             .map_err(|_| ProgramError::InvalidRealloc)?;
 
-                    // Check to see if we've exceeded max realloc across all invocations
+                    // Check to see if we've exceeded max realloc across
+                    // all invocations
                     if new_counter > MAX_PERMITTED_DATA_INCREASE as i32
                     {
                         return Err(ProgramError::InvalidRealloc);
                     }
 
-                    // Set new length and new counter in the serialized data after all validation
+                    // Set new length and new counter in the serialized
+                    // data after all validation
                     (*self.inner).data_len = new_len;
                     (*self.inner).realloc_byte_counter = new_counter;
 
