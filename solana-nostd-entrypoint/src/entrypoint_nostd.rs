@@ -1228,7 +1228,7 @@ impl NoStdAccountInfo {
         }
     }
 
-    #[deprecated(since = "0.6.2")]
+    #[deprecated(since = "0.6.3")]
     pub fn reassign(&self, new_owner: &Pubkey) {
         // Set the non-mut owner field
         unsafe {
