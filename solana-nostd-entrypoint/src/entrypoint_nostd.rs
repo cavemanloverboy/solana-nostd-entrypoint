@@ -1277,6 +1277,14 @@ impl NoStdAccountInfo {
         Ok(())
     }
 
+    pub fn assign(&self, new_owner: &Pubkey) {
+        // Set the non-mut owner field
+        unsafe {
+            (*self.inner).owner = *new_owner;
+        }
+    }
+
+    #[deprecated(since = "0.6.3")]
     pub fn reassign(&self, new_owner: &Pubkey) {
         // Set the non-mut owner field
         unsafe {
